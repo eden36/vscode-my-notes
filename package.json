@@ -1,0 +1,438 @@
+{
+  "name": "mynotes",
+  "displayName": "MyNotes",
+  "description": "Markdown 笔记管理，支持 Git 仓库与 WebDAV 同步",
+  "version": "0.1.0",
+  "publisher": "qunmei",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Notebooks",
+    "Other"
+  ],
+  "keywords": [
+    "notes",
+    "markdown",
+    "sync",
+    "git",
+    "webdav"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "mynotes",
+          "title": "MyNotes",
+          "icon": "resources/notes.svg"
+        }
+      ]
+    },
+    "views": {
+      "mynotes": [
+        {
+          "id": "mynotes.notesView",
+          "name": "笔记",
+          "icon": "resources/notes.svg"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "mynotes.notesView",
+        "contents": "尚未设置笔记目录。\n[选择笔记目录](command:mynotes.setup)",
+        "when": "!mynotes.configured"
+      },
+      {
+        "view": "mynotes.notesView",
+        "contents": "配置的笔记目录不存在。\n[创建该目录](command:mynotes.createNotesLocation)\n[重新选择目录](command:mynotes.setup)",
+        "when": "mynotes.configured && mynotes.locationMissing"
+      },
+      {
+        "view": "mynotes.notesView",
+        "contents": "笔记目录为空。\n[新建笔记](command:mynotes.newNote)",
+        "when": "mynotes.configured && !mynotes.locationMissing"
+      }
+    ],
+    "commands": [
+      {
+        "command": "mynotes.setup",
+        "title": "选择笔记目录",
+        "category": "MyNotes"
+      },
+      {
+        "command": "mynotes.createNotesLocation",
+        "title": "创建笔记目录",
+        "category": "MyNotes"
+      },
+      {
+        "command": "mynotes.newNote",
+        "title": "新建笔记",
+        "category": "MyNotes",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "mynotes.newNoteInFolder",
+        "title": "在此文件夹新建笔记",
+        "category": "MyNotes"
+      },
+      {
+        "command": "mynotes.newFolder",
+        "title": "新建文件夹",
+        "category": "MyNotes",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "mynotes.newFolderInFolder",
+        "title": "在此文件夹新建子文件夹",
+        "category": "MyNotes"
+      },
+      {
+        "command": "mynotes.renameNote",
+        "title": "重命名笔记",
+        "category": "MyNotes"
+      },
+      {
+        "command": "mynotes.renameFolder",
+        "title": "重命名文件夹",
+        "category": "MyNotes"
+      },
+      {
+        "command": "mynotes.deleteNote",
+        "title": "删除笔记",
+        "category": "MyNotes"
+      },
+      {
+        "command": "mynotes.deleteFolder",
+        "title": "删除文件夹",
+        "category": "MyNotes"
+      },
+      {
+        "command": "mynotes.refresh",
+        "title": "刷新笔记列表",
+        "category": "MyNotes",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "mynotes.listNotes",
+        "title": "检索笔记",
+        "category": "MyNotes",
+        "icon": "$(search)"
+      },
+      {
+        "command": "mynotes.revealInExplorer",
+        "title": "在文件管理器中显示",
+        "category": "MyNotes"
+      },
+      {
+        "command": "mynotes.openSettings",
+        "title": "打开设置",
+        "category": "MyNotes",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "mynotes.sync",
+        "title": "立即同步",
+        "category": "MyNotes",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "mynotes.setCredential",
+        "title": "设置同步凭据",
+        "category": "MyNotes"
+      },
+      {
+        "command": "mynotes.clearCredential",
+        "title": "清除同步凭据",
+        "category": "MyNotes"
+      },
+      {
+        "command": "mynotes.showLog",
+        "title": "查看同步日志",
+        "category": "MyNotes"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "mynotes.newNote",
+          "when": "view == mynotes.notesView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "mynotes.newFolder",
+          "when": "view == mynotes.notesView",
+          "group": "navigation@2"
+        },
+        {
+          "command": "mynotes.sync",
+          "when": "view == mynotes.notesView && mynotes.syncEnabled",
+          "group": "navigation@3"
+        },
+        {
+          "command": "mynotes.refresh",
+          "when": "view == mynotes.notesView",
+          "group": "navigation@4"
+        },
+        {
+          "command": "mynotes.openSettings",
+          "when": "view == mynotes.notesView",
+          "group": "navigation@5"
+        },
+        {
+          "command": "mynotes.listNotes",
+          "when": "view == mynotes.notesView",
+          "group": "1_notes@1"
+        },
+        {
+          "command": "mynotes.setCredential",
+          "when": "view == mynotes.notesView",
+          "group": "2_sync@1"
+        },
+        {
+          "command": "mynotes.showLog",
+          "when": "view == mynotes.notesView",
+          "group": "2_sync@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "mynotes.newNoteInFolder",
+          "when": "view == mynotes.notesView && viewItem == folder",
+          "group": "1_new@1"
+        },
+        {
+          "command": "mynotes.newFolderInFolder",
+          "when": "view == mynotes.notesView && viewItem == folder",
+          "group": "1_new@2"
+        },
+        {
+          "command": "mynotes.renameNote",
+          "when": "view == mynotes.notesView && viewItem == note",
+          "group": "2_edit@1"
+        },
+        {
+          "command": "mynotes.renameFolder",
+          "when": "view == mynotes.notesView && viewItem == folder",
+          "group": "2_edit@1"
+        },
+        {
+          "command": "mynotes.deleteNote",
+          "when": "view == mynotes.notesView && viewItem == note",
+          "group": "2_edit@2"
+        },
+        {
+          "command": "mynotes.deleteFolder",
+          "when": "view == mynotes.notesView && viewItem == folder",
+          "group": "2_edit@2"
+        },
+        {
+          "command": "mynotes.revealInExplorer",
+          "when": "view == mynotes.notesView",
+          "group": "3_open@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "mynotes.newNoteInFolder",
+          "when": "false"
+        },
+        {
+          "command": "mynotes.newFolderInFolder",
+          "when": "false"
+        },
+        {
+          "command": "mynotes.renameNote",
+          "when": "false"
+        },
+        {
+          "command": "mynotes.renameFolder",
+          "when": "false"
+        },
+        {
+          "command": "mynotes.deleteNote",
+          "when": "false"
+        },
+        {
+          "command": "mynotes.deleteFolder",
+          "when": "false"
+        },
+        {
+          "command": "mynotes.revealInExplorer",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "MyNotes",
+      "properties": {
+        "mynotes.notesLocation": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "ignoreSync": true,
+          "markdownDescription": "笔记根目录的绝对路径。可使用 `~` 代表用户主目录。\n\n**在本机所有 Profile 之间共享，但不参与 VS Code 设置同步**——同一台电脑上换 Profile 无需重设；而不同电脑的盘符和目录结构通常不同，同步一个本机路径过去大概率无效，需要在每台设备上分别设置一次。"
+        },
+        "mynotes.defaultNoteExtension": {
+          "type": "string",
+          "default": "md",
+          "scope": "application",
+          "description": "新建笔记时，文件名未带扩展名则自动补全的扩展名。"
+        },
+        "mynotes.noteExtensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "md",
+            "txt"
+          ],
+          "scope": "application",
+          "markdownDescription": "在笔记列表中显示的文件扩展名。填入 `*` 表示显示全部文件。"
+        },
+        "mynotes.sync.provider": {
+          "type": "string",
+          "enum": [
+            "none",
+            "git",
+            "webdav"
+          ],
+          "enumDescriptions": [
+            "不启用同步",
+            "同步到 Git 远程仓库（需已安装 git）",
+            "同步到 WebDAV 服务"
+          ],
+          "default": "none",
+          "scope": "application",
+          "description": "同步后端。"
+        },
+        "mynotes.sync.onStartup": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "description": "VS Code 启动后自动同步一次。"
+        },
+        "mynotes.sync.onWindowFocus": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "description": "窗口重新获得焦点时自动同步（受冷却时间限制）。"
+        },
+        "mynotes.sync.focusCooldownSeconds": {
+          "type": "number",
+          "default": 300,
+          "minimum": 10,
+          "scope": "application",
+          "description": "窗口聚焦触发同步的冷却时间（秒）。距上次同步不足该时长则跳过。"
+        },
+        "mynotes.sync.onSave": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "description": "保存笔记后自动同步。"
+        },
+        "mynotes.sync.onSaveDebounceSeconds": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "scope": "application",
+          "description": "保存后自动同步的防抖时长（秒）。"
+        },
+        "mynotes.sync.deviceName": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "ignoreSync": true,
+          "markdownDescription": "本设备名称，用于提交信息和冲突文件命名。留空则使用主机名。\n\n**在本机所有 Profile 之间共享，但不参与 VS Code 设置同步**——同一台电脑无论用哪个 Profile 都是同一台设备；而这个值需要因设备而异，才能在冲突文件名里区分是哪台设备的修改。"
+        },
+        "mynotes.sync.git.remoteUrl": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "markdownDescription": "Git 远程仓库地址。HTTPS 地址需在设置页录入访问令牌；`git@` 开头的 SSH 地址依赖本机已配置的 SSH key。"
+        },
+        "mynotes.sync.git.branch": {
+          "type": "string",
+          "default": "main",
+          "scope": "application",
+          "description": "用于同步的分支名。"
+        },
+        "mynotes.sync.git.commitMessageTemplate": {
+          "type": "string",
+          "default": "notes: {device} {datetime}",
+          "scope": "application",
+          "markdownDescription": "提交信息模板。可用占位符：`{device}`、`{datetime}`、`{count}`（本次变更文件数）。"
+        },
+        "mynotes.sync.git.userName": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "写入笔记仓库的 user.name。留空则沿用全局 git 配置。"
+        },
+        "mynotes.sync.git.userEmail": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "写入笔记仓库的 user.email。留空则沿用全局 git 配置。"
+        },
+        "mynotes.sync.webdav.url": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "markdownDescription": "WebDAV 服务地址，例如 `https://dav.jianguoyun.com/dav/`。"
+        },
+        "mynotes.sync.webdav.remotePath": {
+          "type": "string",
+          "default": "/mynotes",
+          "scope": "application",
+          "description": "笔记在 WebDAV 服务上的存放路径。"
+        },
+        "mynotes.sync.webdav.username": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "WebDAV 用户名。密码请在设置页对应后端一节中录入。"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run check-types && node esbuild.mjs --production",
+    "compile": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src",
+    "compile-tests": "tsc -p .",
+    "test": "npm run compile-tests && mocha \"out/test/**/*.test.js\"",
+    "verify:git": "node scripts/verify-git-sync.mjs",
+    "verify:activation": "npm run compile && node scripts/verify-activation.mjs",
+    "verify:sync-state": "node scripts/verify-sync-state.mjs",
+    "debug:prep": "node scripts/setup-debug-workspace.mjs",
+    "debug:reset": "node scripts/setup-debug-workspace.mjs --reset",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.90.0",
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.28.1",
+    "eslint": "^9.17.0",
+    "mocha": "^11.7.6",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.65.0"
+  },
+  "dependencies": {
+    "simple-git": "^3.36.0",
+    "webdav": "^5.10.0"
+  }
+}
