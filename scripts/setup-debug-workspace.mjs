@@ -2,12 +2,17 @@
 // mynotes.notesLocation 指向它，这样调试宿主一启动就能直接看到笔记树，
 // 不用每次手动执行「选择笔记目录」，也不会碰到你日常使用的真实笔记。
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { homedir } from 'os';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const workspaceDir = path.join(repoRoot, '.dev', 'test-workspace');
-const notesDir = path.join(workspaceDir, 'notes');
+// 笔记目录必须落在本仓库之外。它自身会成为一个 Git 仓库，若放在仓库内部，
+// 插件为保护外层仓库会直接中止同步，Git 后端根本无法调试；.gitignore 也挡不住
+// 这一点，Git 判断归属看的是工作树而不是忽略规则。
+const notesDir = path.join(homedir(), '.mynotes-debug', 'notes');
+const legacyNotesDir = path.join(workspaceDir, 'notes');
 const reset = process.argv.includes('--reset');
 
 const SAMPLE_FILES = {
@@ -18,7 +23,7 @@ const SAMPLE_FILES = {
     '不会影响你日常使用的真实笔记。',
     '',
     `- 目录位置：\`${notesDir}\``,
-    '- 已加入 .gitignore，不会被提交',
+    '- 特意放在插件仓库之外，Git 后端才能正常调试，也不会牵连插件项目自身的仓库',
     '- 如需清空并重新生成示例内容，运行 `npm run debug:reset`',
     '',
   ].join('\n'),
@@ -76,6 +81,11 @@ if (existsSync(legacyWorkspaceSettings)) {
   } catch {
     // 内容异常就不动它，避免误删用户手写的配置
   }
+}
+
+// 旧版本把示例笔记放在仓库内的 .dev/test-workspace/notes，留着会继续挡住 Git 后端调试
+if (existsSync(legacyNotesDir)) {
+  console.log(`提示：旧的示例笔记目录仍在仓库内，确认无用后可删除：${legacyNotesDir}`);
 }
 
 console.log('调试工作区已就绪');

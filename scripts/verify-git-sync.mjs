@@ -341,6 +341,36 @@ console.log('\n场景 8：首次同步自动初始化本地仓库');
   check('外层仓库没有被加上 origin', tryGit(guarded, ['remote', 'get-url', 'origin']).ok, false);
   check('外层仓库仍在原来的分支上', git(guarded, ['rev-parse', '--abbrev-ref', 'HEAD']).trim(), 'master');
 
+  // 笔记目录自己已经是仓库根、但仍嵌套在别的仓库里：同样不允许同步。
+  // 这一条只查笔记目录自身是查不出来的——在它内部 rev-parse 只会得到它自己
+  const nestedNotes = join(guarded, 'nested-notes');
+  mkdirSync(nestedNotes, { recursive: true });
+  git(nestedNotes, ['init', '-b', 'main', '.']);
+  writeFileSync(join(nestedNotes, '笔记.md'), '内容\n');
+  const nestedHeadBefore = git(guarded, ['rev-parse', 'HEAD']).trim();
+
+  let nestedBlocked = '';
+  try {
+    await new GitSyncProvider(context).sync(makeCtx(nestedNotes));
+  } catch (err) {
+    nestedBlocked = err instanceof Error ? err.message : String(err);
+  }
+
+  check('嵌套仓库同样被拒绝同步', nestedBlocked.includes('内部'), true);
+  check('嵌套的笔记仓库没有被加上 origin', tryGit(nestedNotes, ['remote', 'get-url', 'origin']).ok, false);
+  check('嵌套情形下外层仓库也没有被提交', git(guarded, ['rev-parse', 'HEAD']).trim(), nestedHeadBefore);
+
+  // 独立存放的笔记仓库不能被这条规则误伤
+  const standalone = join(ROOT, 'standalone-notes');
+  mkdirSync(standalone, { recursive: true });
+  writeFileSync(join(standalone, '笔记.md'), '内容\n');
+  const standaloneRemote = join(ROOT, 'standalone-remote.git');
+  git(ROOT, ['init', '--bare', '-b', 'main', standaloneRemote]);
+  settings.set('sync.git.remoteUrl', standaloneRemote);
+
+  await new GitSyncProvider(context).sync(makeCtx(standalone));
+  check('仓库外的笔记目录正常完成同步', existsSync(join(standalone, '.git')), true);
+
   Module._load = originalLoad;
   rmSync(outfile, { force: true });
 }

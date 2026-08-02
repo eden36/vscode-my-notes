@@ -93,9 +93,12 @@ export class GitSyncProvider implements SyncProvider {
     const git = await this.createGit(ctx.root.fsPath, cfg.git.remoteUrl);
 
     ctx.report('检查仓库状态');
-    // 必须判定笔记目录本身就是仓库根：默认的 checkIsRepo() 只问「是否在某个工作树内」，
-    // 笔记目录若恰好放在另一个仓库（例如某个项目）下面，就会把那个仓库当成笔记仓库，
-    // 接着对它执行 add -A / commit / push，把无关内容推到笔记远端
+    // 无条件先查归属：笔记目录一律不得位于其他 Git 仓库内部，哪怕它自己已经是
+    // 一个仓库根（嵌套仓库同样拒绝——外层仓库会把笔记目录记成一个 gitlink，
+    // 两边的历史互相干扰，笔记内容看似已提交实则没有）
+    await assertNotInsideAnotherRepo(ctx.root.fsPath);
+
+    // 到这里已确认不在别人的仓库里，笔记目录自己还不是仓库根就地建一个
     if (!(await git.checkIsRepo(CheckRepoActions.IS_REPO_ROOT))) {
       ctx.report('初始化本地仓库');
       await this.initRepository(git, ctx.root, cfg.git.branch);
@@ -156,10 +159,9 @@ export class GitSyncProvider implements SyncProvider {
   /**
    * 在笔记目录就地建立仓库：init、切到同步分支、补一份 .gitignore。
    * origin 与提交身份交给随后的 ensureRemote / ensureIdentity 统一处理。
+   * 调用前 sync() 已确认该目录不在其他仓库内部。
    */
   private async initRepository(git: SimpleGit, root: vscode.Uri, branch: string): Promise<void> {
-    await assertNotInsideAnotherRepo(git, root.fsPath);
-
     await git.init();
     // 跨设备同步时统一换行符处理，避免因 CRLF 改写产生整文件差异
     await git.addConfig('core.autocrlf', 'false', false, 'local');
@@ -391,21 +393,33 @@ function throwIfCancelled(ctx: SyncContext): void {
 }
 
 /**
- * 笔记目录位于另一个仓库内部时必须中止，且绝不能在这里 init：
- * 继续下去会把那个仓库的内容当作笔记提交推送，remote set-url 还会改掉它的 origin。
+ * 笔记目录一律不得位于其他 Git 仓库内部，否则拒绝同步。
+ *
+ * 必须从「父目录」查起，而不是笔记目录自身：笔记目录若已经是一个仓库根，
+ * 在它内部执行 rev-parse 只会得到它自己，外层仓库根本看不见，嵌套的情形就被漏掉了。
+ *
+ * 拒绝的理由有两层：笔记目录尚未初始化时，后续操作会落到外层仓库上，把那个仓库的
+ * 内容当作笔记提交推送、还会改掉它的 origin；笔记目录已是独立仓库时虽不会误伤外层，
+ * 但外层会把它记成一个 gitlink，笔记内容看似已提交实则没有进入任何一方的版本控制。
  */
-async function assertNotInsideAnotherRepo(git: SimpleGit, notesPath: string): Promise<void> {
+async function assertNotInsideAnotherRepo(notesPath: string): Promise<void> {
+  const parent = path.dirname(notesPath);
+  if (parent === notesPath) {
+    return; // 已经是磁盘根目录，没有更外层了
+  }
+
   let owner = '';
   try {
-    owner = (await git.revparse(['--show-toplevel'])).trim();
+    const { stdout } = await execFileAsync('git', ['rev-parse', '--show-toplevel'], { cwd: parent });
+    owner = stdout.trim();
   } catch {
-    return; // 不在任何仓库内，可以放心初始化
+    return; // 父目录不在任何仓库内，这才是笔记目录应有的位置
   }
 
   if (owner) {
     throw new SyncConfigError(
-      `笔记目录「${notesPath}」位于 Git 仓库「${path.normalize(owner)}」内部。` +
-        '在这里同步会把该仓库的内容当作笔记推送到远端，因此已中止。请把笔记目录改到该仓库之外。',
+      `笔记目录「${notesPath}」位于 Git 仓库「${path.normalize(owner)}」内部，无法进行 Git 同步。` +
+        '笔记仓库必须与其他仓库彼此独立，请把笔记目录移到该仓库之外。',
     );
   }
 }
