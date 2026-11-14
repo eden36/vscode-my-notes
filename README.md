@@ -1,4 +1,4 @@
-# MyNotes
+# SyncNotes
 
 在 VS Code 中管理 Markdown 笔记，并支持把笔记同步到 **Git 远程仓库** 或 **WebDAV 服务**。
 
@@ -16,13 +16,13 @@
 
 ## 快速开始
 
-1. 打开活动栏中的 **MyNotes** 图标，点击「选择笔记目录」，指定一个用于存放笔记的目录。
+1. 打开活动栏中的 **SyncNotes** 图标，点击「选择笔记目录」，指定一个用于存放笔记的目录。
 2. 点击视图标题栏的 `+` 新建笔记。
 3. 需要同步时，点击视图标题栏的齿轮图标打开设置页，选择同步方式并填好参数。
 
 ## 设置
 
-点击视图标题栏的齿轮图标（或执行「MyNotes: 打开设置」）会打开一个独立页签，笔记与两种同步后端的全部常用配置都在这一页上，改一项立即生效。重复点击只会把已打开的页签带到前台，不会开出多个页签。
+点击视图标题栏的齿轮图标（或执行「SyncNotes: 打开设置」）会打开一个独立页签，笔记与两种同步后端的全部常用配置都在这一页上，改一项立即生效。重复点击只会把已打开的页签带到前台，不会开出多个页签。
 
 页面包含四节：**笔记**、**同步**（后端选择与触发时机）、**Git 仓库**、**WebDAV**。后两节跟随「同步方式」下拉框切换显示——选 Git 只显示 Git 一节，选 WebDAV 只显示 WebDAV 一节，选「不同步」则给出提示。切换方式不会清空另一种的配置，随时可以切回来继续用。
 
@@ -36,20 +36,20 @@
 
 | 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
-| `mynotes.notesLocation` | 空 | 笔记根目录的绝对路径，支持 `~` |
-| `mynotes.defaultNoteExtension` | `md` | 新建笔记时自动补全的扩展名 |
-| `mynotes.noteExtensions` | `["md","txt"]` | 树视图中显示的扩展名，填 `*` 显示全部文件 |
-| `mynotes.sync.provider` | `none` | 同步后端：`none` / `git` / `webdav` |
-| `mynotes.sync.onStartup` | `true` | 启动后自动同步一次 |
-| `mynotes.sync.onWindowFocus` | `true` | 窗口重新聚焦时同步 |
-| `mynotes.sync.focusCooldownSeconds` | `300` | 聚焦同步的冷却时间（秒） |
-| `mynotes.sync.onSave` | `false` | 保存笔记后自动同步 |
-| `mynotes.sync.onSaveDebounceSeconds` | `30` | 保存同步的防抖时长（秒） |
-| `mynotes.sync.deviceName` | 空 | 设备名，用于提交信息与冲突文件命名，留空取主机名 |
+| `syncnotes.notesLocation` | 空 | 笔记根目录的绝对路径，支持 `~` |
+| `syncnotes.defaultNoteExtension` | `md` | 新建笔记时自动补全的扩展名 |
+| `syncnotes.noteExtensions` | `["md","txt"]` | 树视图中显示的扩展名，填 `*` 显示全部文件 |
+| `syncnotes.sync.provider` | `none` | 同步后端：`none` / `git` / `webdav` |
+| `syncnotes.sync.onStartup` | `true` | 启动后自动同步一次 |
+| `syncnotes.sync.onWindowFocus` | `true` | 窗口重新聚焦时同步 |
+| `syncnotes.sync.focusCooldownSeconds` | `300` | 聚焦同步的冷却时间（秒） |
+| `syncnotes.sync.onSave` | `false` | 保存笔记后自动同步 |
+| `syncnotes.sync.onSaveDebounceSeconds` | `30` | 保存同步的防抖时长（秒） |
+| `syncnotes.sync.deviceName` | 空 | 设备名，用于提交信息与冲突文件命名，留空取主机名 |
 
 > 同步的范围是笔记目录下的**全部文件**，而不只是 `noteExtensions` 里的扩展名——否则笔记引用的图片等附件会在其他设备上缺失。`.git`、`node_modules`、`.DS_Store` 等会自动跳过。
 
-**密码与访问令牌不会写入设置文件**，而是保存在系统密钥库（VS Code SecretStorage）中，在设置页对应后端一节内录入（也可用命令「MyNotes: 设置同步凭据」）。Git 凭据按仓库地址保存，WebDAV 凭据按服务地址和账号分别保存。同一服务的不同账号分别录入密码；升级后旧凭据缺少账号归属时，需要重新录入，旧凭据仍保留在密钥库中。
+**密码与访问令牌不会写入设置文件**，而是保存在系统密钥库（VS Code SecretStorage）中，在设置页对应后端一节内录入（也可用命令「SyncNotes: 设置同步凭据」）。Git 凭据按仓库地址保存，WebDAV 凭据按服务地址和账号分别保存。同一服务的不同账号分别录入密码；升级后旧凭据缺少账号归属时，需要重新录入，旧凭据仍保留在密钥库中。
 
 ### 跨 Profile 共享与跨设备同步
 
@@ -62,11 +62,11 @@
 
 > 跨 Profile 共享和跨设备同步由两个独立机制控制：`scope` 决定前者，`ignoreSync` 决定后者。
 
-**Settings Sync 不会同步凭据**——`mynotes.setCredential` 保存的令牌 / 密码走的是 SecretStorage，不在 Settings Sync 的同步范围内，换新电脑后仍需重新录入一次（但同一台电脑上的多个 Profile 已经共用同一份，不用重复录入）。
+**Settings Sync 不会同步凭据**——`syncnotes.setCredential` 保存的令牌 / 密码走的是 SecretStorage，不在 Settings Sync 的同步范围内，换新电脑后仍需重新录入一次（但同一台电脑上的多个 Profile 已经共用同一份，不用重复录入）。
 
 ### 同时开着多个 VS Code 窗口
 
-每个窗口都是独立的进程，都会各自跑同步。为避免两个窗口同时改写同一份基线（Git 后端还会直接撞上 `index.lock`），同步前会先在 `~/.mynotes/` 取一把**按笔记目录区分的进程锁**：
+每个窗口都是独立的进程，都会各自跑同步。为避免两个窗口同时改写同一份基线（Git 后端还会直接撞上 `index.lock`），同步前会先在 `~/.syncnotes/` 取一把**按笔记目录区分的进程锁**：
 
 - 同一时刻只有一个窗口在同步，其余窗口跳过本轮；手动触发时会提示「另一个窗口正在同步」。
 - 持锁期间定期续期，进程仍存活时保留互斥。异常退出留下的锁过期后可重新取得，锁失效会停止任务的后续步骤。
@@ -121,7 +121,7 @@ WebDAV 本身没有版本概念，插件通过一份**本地状态清单**记录
 
 这样才能区分「本地新增」和「远端已删除」——只比较修改时间是做不到的，会把已删除的笔记反复复活。
 
-清单保存在用户主目录下的 `~/.mynotes/` 中，按实际本地目录、服务地址、账号与远端目录区分。每台设备维护自己的清单，同一实际目录通过目录联接打开时仍使用同一份状态。
+清单保存在用户主目录下的 `~/.syncnotes/` 中，按实际本地目录、服务地址、账号与远端目录区分。每台设备维护自己的清单，同一实际目录通过目录联接打开时仍使用同一份状态。
 
 生产环境的共享目录独立于 Profile，开发与测试宿主使用隔离存储。v2 基线包含同步关系身份和待核实动作。旧版基线缺少本地目录与账号归属，升级时保留旧文件，并按双方当前内容重建，首轮保留双方独有文件、为不同内容创建冲突副本。此前删除的文件可能重新出现，插件会给出提示。
 
@@ -145,7 +145,7 @@ WebDAV 本身没有版本概念，插件通过一份**本地状态清单**记录
 
 ## 命令
 
-全部命令可在命令面板中以 `MyNotes` 前缀找到：
+全部命令可在命令面板中以 `SyncNotes` 前缀找到：
 
 | 命令 | 说明 |
 | --- | --- |
@@ -182,7 +182,7 @@ npm run verify:installed     # 将隔离打包产物安装到临时目录并验�
 
 在 VS Code 中按 <kbd>F5</kbd> 启动扩展开发宿主进行调试。首次按下会自动：
 
-1. 运行 `scripts/setup-debug-workspace.mjs`，在用户主目录的 `.mynotes-debug/notes` 下生成示例笔记，并把该目录写入隔离的 `.dev/user-data/User/settings.json`，使 `application` 配置生效
+1. 运行 `scripts/setup-debug-workspace.mjs`，在用户主目录的 `.syncnotes-debug/notes` 下生成示例笔记，并把该目录写入隔离的 `.dev/user-data/User/settings.json`，使 `application` 配置生效
 2. 运行 esbuild 构建
 3. 用独立的 `--user-data-dir`（`.dev/user-data`）打开这个示例工作区，调试宿主的设置、状态与你日常使用的 VS Code 完全隔离
 
@@ -190,7 +190,7 @@ npm run verify:installed     # 将隔离打包产物安装到临时目录并验�
 
 `verify:git` 在每轮专属临时目录建立裸仓库与两个笔记仓库，直接调用生产后端验证双方修改、删除冲突、新增冲突、二进制内容、取消和推送竞争。`verify:webdav` 启动可控制的本地服务验证版本条件和故障恢复。验证脚本仅清理本轮创建的临时数据。
 
-`verify:host` 需要本机可用的 VS Code，通过独立用户数据和扩展目录运行两个测试窗口，验证真实编辑缓冲区的未保存状态与保存后清除。可使用 `MYNOTES_VSCODE_EXECUTABLE` 指定 VS Code 可执行文件路径。
+`verify:host` 需要本机可用的 VS Code，通过独立用户数据和扩展目录运行两个测试窗口，验证真实编辑缓冲区的未保存状态与保存后清除。可使用 `SYNCNOTES_VSCODE_EXECUTABLE` 指定 VS Code 可执行文件路径。
 
 > `watch` 任务的问题匹配器直接写在 `.vscode/tasks.json` 里（识别 `esbuild.mjs` 打印的 `[watch] build started` / `[watch] build finished`），不依赖任何第三方扩展，装好依赖后开箱即用。
 

@@ -24,13 +24,13 @@ try {
   const installed = await execute(executable, [cli, ...args, '--list-extensions'], {
     env: cliEnv, windowsHide: true, timeout: 60000
   });
-  assert.ok(installed.stdout.includes('qunmei.mynotes'));
-  const directory = (await fs.readdir(extensions)).find(name => name.startsWith('qunmei.mynotes-'));
+  assert.ok(installed.stdout.includes('saltcoreyan.syncnotes'));
+  const directory = (await fs.readdir(extensions)).find(name => name.startsWith('saltcoreyan.syncnotes-'));
   assert.ok(directory);
   const packageRoot = path.join(extensions, directory);
   await execute(process.execPath, ['scripts/verify-host.mjs'], {
     env: {
-      ...process.env, MYNOTES_HOST_EXTENSION_PATH: packageRoot
+      ...process.env, SYNCNOTES_HOST_EXTENSION_PATH: packageRoot
     }, windowsHide: true, timeout: 150000,
   });
   console.log('通过 VSIX 隔离安装、扩展注册与打包产物双宿主验收');

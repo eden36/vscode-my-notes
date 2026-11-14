@@ -4,11 +4,11 @@ import { log } from '../../log';
 /** git 只接受可执行文件作为 GIT_ASKPASS，这里生成一层壳脚本转调 Node */
 const WRAPPER_WINDOWS = [
   '@ECHO OFF',
-  '"%MYNOTES_ASKPASS_NODE%" "%MYNOTES_ASKPASS_MAIN%" %*',
+  '"%SYNCNOTES_ASKPASS_NODE%" "%SYNCNOTES_ASKPASS_MAIN%" %*',
   '',
 ].join('\r\n');
 
-const WRAPPER_POSIX = ['#!/bin/sh', 'exec "$MYNOTES_ASKPASS_NODE" "$MYNOTES_ASKPASS_MAIN" "$@"', ''].join('\n');
+const WRAPPER_POSIX = ['#!/bin/sh', 'exec "$SYNCNOTES_ASKPASS_NODE" "$SYNCNOTES_ASKPASS_MAIN" "$@"', ''].join('\n');
 
 export interface Credentials {
   username: string;
@@ -26,7 +26,7 @@ export async function buildAskpassEnv(
   credentials: Credentials,
 ): Promise<Record<string, string>> {
   const isWindows = process.platform === 'win32';
-  const wrapperName = isWindows ? 'mynotes-askpass.bat' : 'mynotes-askpass.sh';
+  const wrapperName = isWindows ? 'syncnotes-askpass.bat' : 'syncnotes-askpass.sh';
   const wrapperUri = vscode.Uri.joinPath(context.globalStorageUri, wrapperName);
   const mainUri = vscode.Uri.joinPath(context.extensionUri, 'dist', 'askpassMain.js');
 
@@ -47,11 +47,11 @@ export async function buildAskpassEnv(
 
   return {
     GIT_ASKPASS: wrapperUri.fsPath,
-    MYNOTES_ASKPASS_NODE: process.execPath,
-    MYNOTES_ASKPASS_MAIN: mainUri.fsPath,
+    SYNCNOTES_ASKPASS_NODE: process.execPath,
+    SYNCNOTES_ASKPASS_MAIN: mainUri.fsPath,
     ELECTRON_RUN_AS_NODE: '1',
-    MYNOTES_GIT_USERNAME: credentials.username,
-    MYNOTES_GIT_PASSWORD: credentials.password,
+    SYNCNOTES_GIT_USERNAME: credentials.username,
+    SYNCNOTES_GIT_PASSWORD: credentials.password,
   };
 }
 

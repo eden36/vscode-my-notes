@@ -141,7 +141,7 @@ export class GitSyncProvider implements SyncProvider {
     if (branch !== cfg.git.branch) {
       throw new SyncConfigError(
         `笔记仓库当前分支为「${branch}」，与配置的同步分支「${cfg.git.branch}」不一致。` +
-          `请修改设置 mynotes.sync.git.branch，或将仓库切换到「${cfg.git.branch}」分支。`,
+          `请修改设置 syncnotes.sync.git.branch，或将仓库切换到「${cfg.git.branch}」分支。`,
       );
     }
 
@@ -525,7 +525,7 @@ async function ensureGitignore(root: vscode.Uri): Promise<void> {
   if (await exists(uri)) {
     return;
   }
-  const content = ['.DS_Store', 'Thumbs.db', 'desktop.ini', 'node_modules/', '.svn/', '.hg/', '$RECYCLE.BIN/', '.mynotes-tmp-*', ''].join('\n');
+  const content = ['.DS_Store', 'Thumbs.db', 'desktop.ini', 'node_modules/', '.svn/', '.hg/', '$RECYCLE.BIN/', '.syncnotes-tmp-*', ''].join('\n');
   await vscode.workspace.fs.writeFile(uri, Buffer.from(content, 'utf8'));
 }
 

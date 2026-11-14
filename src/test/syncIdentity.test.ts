@@ -36,7 +36,7 @@ describe('同步关系身份与路径约束', () => {
     assert.strictEqual(isSyncPath('工作/附件.bin'), true);
   });
   it('实际目录与目录联接使用相同身份', async () => {
-    const temporary = await mkdtemp(path.join(os.tmpdir(), 'mynotes-test-identity-'));
+    const temporary = await mkdtemp(path.join(os.tmpdir(), 'syncnotes-test-identity-'));
     try {
       const root = path.join(temporary, 'notes');
       const alias = path.join(temporary, 'alias');
@@ -46,7 +46,7 @@ describe('同步关系身份与路径约束', () => {
     }
     finally {
       assert.strictEqual(path.dirname(path.resolve(temporary)), path.resolve(os.tmpdir()));
-      assert.ok(path.basename(temporary).startsWith('mynotes-test-identity-'));
+      assert.ok(path.basename(temporary).startsWith('syncnotes-test-identity-'));
       await rm(temporary, {
         recursive: true, force: true
       });

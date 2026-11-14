@@ -1,5 +1,5 @@
 // F5 调试前的准备脚本：生成一个带示例笔记的临时工作区，并把
-// mynotes.notesLocation 指向它，这样调试宿主一启动就能直接看到笔记树，
+// syncnotes.notesLocation 指向它，这样调试宿主一启动就能直接看到笔记树，
 // 不用每次手动执行「选择笔记目录」，也不会碰到你日常使用的真实笔记。
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
@@ -11,13 +11,13 @@ const workspaceDir = path.join(repoRoot, '.dev', 'test-workspace');
 // 笔记目录必须落在本仓库之外。它自身会成为一个 Git 仓库，若放在仓库内部，
 // 插件为保护外层仓库会直接中止同步，Git 后端根本无法调试；.gitignore 也挡不住
 // 这一点，Git 判断归属看的是工作树而不是忽略规则。
-const notesDir = path.join(homedir(), '.mynotes-debug', 'notes');
+const notesDir = path.join(homedir(), '.syncnotes-debug', 'notes');
 const legacyNotesDir = path.join(workspaceDir, 'notes');
 const reset = process.argv.includes('--reset');
 
 const SAMPLE_FILES = {
   '快速开始.md': [
-    '# 欢迎使用 MyNotes 调试工作区',
+    '# 欢迎使用 SyncNotes 调试工作区',
     '',
     '这是按 F5 启动调试时自动打开的示例笔记目录，用于快速验证笔记与同步功能，',
     '不会影响你日常使用的真实笔记。',
@@ -61,7 +61,7 @@ if (existsSync(userSettingsPath)) {
     console.log('调试宿主的用户设置无法解析，将重新生成');
   }
 }
-userSettings['mynotes.notesLocation'] = notesDir;
+userSettings['syncnotes.notesLocation'] = notesDir;
 writeFileSync(userSettingsPath, JSON.stringify(userSettings, null, 2), 'utf8');
 
 // 早期版本把 notesLocation 写在工作区设置里，留着会被 VS Code 标为「只能在用户设置中应用」
@@ -69,8 +69,8 @@ const legacyWorkspaceSettings = path.join(workspaceDir, '.vscode', 'settings.jso
 if (existsSync(legacyWorkspaceSettings)) {
   try {
     const legacy = JSON.parse(readFileSync(legacyWorkspaceSettings, 'utf8'));
-    if ('mynotes.notesLocation' in legacy) {
-      delete legacy['mynotes.notesLocation'];
+    if ('syncnotes.notesLocation' in legacy) {
+      delete legacy['syncnotes.notesLocation'];
       if (Object.keys(legacy).length === 0) {
         rmSync(legacyWorkspaceSettings, { force: true });
       } else {

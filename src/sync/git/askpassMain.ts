@@ -8,9 +8,9 @@ function main(): void {
 
   let value: string | undefined;
   if (prompt.includes('username')) {
-    value = process.env['MYNOTES_GIT_USERNAME'];
+    value = process.env['SYNCNOTES_GIT_USERNAME'];
   } else if (prompt.includes('password') || prompt.includes('token')) {
-    value = process.env['MYNOTES_GIT_PASSWORD'];
+    value = process.env['SYNCNOTES_GIT_PASSWORD'];
   }
 
   // 无法识别的提示（如 SSH key 口令）一律不作答，让 git 按失败处理而不是挂起

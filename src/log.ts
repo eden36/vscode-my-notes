@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 let channel: vscode.LogOutputChannel | undefined;
 
 export function initLog(context: vscode.ExtensionContext): void {
-  channel = vscode.window.createOutputChannel('MyNotes', { log: true });
+  channel = vscode.window.createOutputChannel('SyncNotes', { log: true });
   context.subscriptions.push(channel);
 }
 

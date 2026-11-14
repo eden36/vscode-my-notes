@@ -23,9 +23,9 @@ async function waitFor(file: string): Promise<void> {
 }
 /** 真实编辑器 API 验收，两个独立用户数据目录共享测试编辑状态。 */
 export async function run(): Promise<void> {
-  const owned = !process.env['MYNOTES_HOST_TEST_ROOT'];
-  const root = process.env['MYNOTES_HOST_TEST_ROOT'] ?? await fs.mkdtemp(path.join(os.tmpdir(), 'mynotes-test-host-'));
-  const role = process.env['MYNOTES_HOST_TEST_ROLE'] ?? 'single';
+  const owned = !process.env['SYNCNOTES_HOST_TEST_ROOT'];
+  const root = process.env['SYNCNOTES_HOST_TEST_ROOT'] ?? await fs.mkdtemp(path.join(os.tmpdir(), 'syncnotes-test-host-'));
+  const role = process.env['SYNCNOTES_HOST_TEST_ROLE'] ?? 'single';
   const notes = path.join(root, 'notes');
   await fs.mkdir(notes, {
     recursive: true
@@ -41,15 +41,15 @@ export async function run(): Promise<void> {
       throw error;
     }
   }
-  const configuration = vscode.workspace.getConfiguration('mynotes');
+  const configuration = vscode.workspace.getConfiguration('syncnotes');
   await configuration.update('notesLocation', notes, vscode.ConfigurationTarget.Global);
   await configuration.update('sync.provider', 'none', vscode.ConfigurationTarget.Global);
   await configuration.update('sync.onStartup', false, vscode.ConfigurationTarget.Global);
-  const extension = vscode.extensions.getExtension('qunmei.mynotes');
-  assert.ok(extension, '缺少待测试的 MyNotes 扩展。');
+  const extension = vscode.extensions.getExtension('saltcoreyan.syncnotes');
+  assert.ok(extension, '缺少待测试的 SyncNotes 扩展。');
   await extension.activate();
   const commands = await vscode.commands.getCommands(true);
-  for (const command of ['mynotes.newNote', 'mynotes.openSettings', 'mynotes.sync']) {
+  for (const command of ['syncnotes.newNote', 'syncnotes.openSettings', 'syncnotes.sync']) {
     assert.ok(commands.includes(command), `缺少命令：${command}`);
   }
   assert.strictEqual(configuration.inspect('notesLocation')?.globalValue, notes);
@@ -82,13 +82,13 @@ export async function run(): Promise<void> {
       assert.strictEqual(await editors.isEditing('a.md'), false);
       await fs.writeFile(path.join(root, 'release-editor'), 'release');
     }
-    await vscode.commands.executeCommand('mynotes.openSettings');
+    await vscode.commands.executeCommand('syncnotes.openSettings');
     const tabDeadline = Date.now() + 10000;
     while (!vscode.window.tabGroups.all.some(group => group.tabs.some(tab => tab.input instanceof vscode.TabInputWebview)) && Date.now() < tabDeadline) {
       await new Promise(resolve => setTimeout(resolve, 50));
     }
     assert.ok(vscode.window.tabGroups.all.some(group => group.tabs.some(tab => tab.input instanceof vscode.TabInputWebview)));
-    await vscode.commands.executeCommand('mynotes.refresh');
+    await vscode.commands.executeCommand('syncnotes.refresh');
     await fs.writeFile(path.join(root, `${role}-passed.json`), JSON.stringify({
       role, activation: true, tree: true, settings: true, editing: true
     }));

@@ -67,8 +67,8 @@ export class NotesTreeProvider implements vscode.TreeDataProvider<NoteItem>, vsc
     const root = this.rootUri;
     const configured = root !== undefined;
     const missing = configured ? !(await isDirectory(root)) : false;
-    await vscode.commands.executeCommand('setContext', 'mynotes.configured', configured);
-    await vscode.commands.executeCommand('setContext', 'mynotes.locationMissing', missing);
+    await vscode.commands.executeCommand('setContext', 'syncnotes.configured', configured);
+    await vscode.commands.executeCommand('setContext', 'syncnotes.locationMissing', missing);
   }
 
   getTreeItem(element: NoteItem): vscode.TreeItem {

@@ -9,7 +9,7 @@ export async function packageArtifact(explicit) {
     return file;
   }
   const manifest = JSON.parse(await fs.readFile('package.json', 'utf8'));
-  const candidates = ['.dev/mynotes-refactor.vsix', `${manifest.name}-${manifest.version}.vsix`];
+  const candidates = ['.dev/syncnotes-refactor.vsix', `${manifest.name}-${manifest.version}.vsix`];
   const available = [];
   for (const candidate of candidates) {
     try {

@@ -27,13 +27,13 @@ try {
   const before = await api.readRunRecord(env.context.globalStorageUri, identity);
   assert.ok(before.lastSuccessAt);
   await fs.unlink(path.join(notes, 'a.md'));
-  server.failures.set('DELETE /mynotes/a.md', 503);
+  server.failures.set('DELETE /syncnotes/a.md', 503);
   await manager.requestSync('manual');
   assert.equal(events.at(-1).state, 'partial');
   const partial = await api.readRunRecord(env.context.globalStorageUri, identity);
   assert.equal(partial.lastSuccessAt, before.lastSuccessAt);
   await manager.requestSync('manual');
-  assert.equal(server.files.has('/mynotes/a.md'), false);
+  assert.equal(server.files.has('/syncnotes/a.md'), false);
   console.log('通过 协调器部分完成、成功时间和重试');
   const focusCount = events.filter(event => event.state === 'running').length;
   await manager.requestSync('focus');
@@ -46,7 +46,7 @@ try {
   await fs.writeFile(path.join(notes, 'new.md'), 'created later');
   await manager.requestSync('manual');
   assert.equal(events.at(-1).state, 'complete');
-  assert.equal(server.files.get('/mynotes/new.md').content.toString(), 'created later');
+  assert.equal(server.files.get('/syncnotes/new.md').content.toString(), 'created later');
   console.log('通过 先配置后创建目录的同步恢复');
   env.settings.set('sync.onSave', true);
   env.settings.set('sync.onSaveDebounceSeconds', 1);
@@ -67,7 +67,7 @@ try {
     await Promise.race([saved, new Promise((_, reject) => {
       saveTimeout = setTimeout(() => reject(new Error('保存同步未完成。')), 5000);
     })]);
-    assert.equal(server.files.get('/mynotes/saved.md').content.toString(), 'save event');
+    assert.equal(server.files.get('/syncnotes/saved.md').content.toString(), 'save event');
   } finally { clearTimeout(saveTimeout); saveSubscription?.dispose(); }
   env.documents.save.fire({ uri: Uri.file(path.join(notes, 'saved.md')) });
   env.settings.set('sync.onSave', false);
@@ -97,7 +97,7 @@ try {
   const other = path.join(env.root, 'other');
   const switchedIdentity = api.syncIdentity(await fs.realpath(notes), api.getSyncConfig());
   await fs.mkdir(other);
-  server.beforeList.set('/mynotes', async () => {
+  server.beforeList.set('/syncnotes', async () => {
     env.settings.set('notesLocation', other);
     await manager.reconfigure();
   });
@@ -114,7 +114,7 @@ try {
   const release = new Promise(resolve => {
     releaseListing = resolve;
   });
-  server.beforeList.set('/mynotes', async () => {
+  server.beforeList.set('/syncnotes', async () => {
     notifyListing();
     await release;
   });

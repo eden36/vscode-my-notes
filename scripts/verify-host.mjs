@@ -19,16 +19,16 @@ try {
       recursive: true
     });
     await fs.writeFile(path.join(userData, 'User', 'settings.json'), JSON.stringify({
-      'mynotes.notesLocation': notes, 'mynotes.sync.provider': 'none', 'mynotes.sync.onStartup': false,
+      'syncnotes.notesLocation': notes, 'syncnotes.sync.provider': 'none', 'syncnotes.sync.onStartup': false,
       'telemetry.telemetryLevel': 'off', 'security.workspace.trust.enabled': false,
       'chat.disableAIFeatures': true, 'workbench.startupEditor': 'none',
     }));
     const processEnv = {
-      ...process.env, MYNOTES_HOST_TEST_ROOT: env.root, MYNOTES_HOST_TEST_ROLE: role
+      ...process.env, SYNCNOTES_HOST_TEST_ROOT: env.root, SYNCNOTES_HOST_TEST_ROLE: role
     };
     delete processEnv.ELECTRON_RUN_AS_NODE;
     delete processEnv.VSCODE_IPC_HOOK_CLI;
-    const child = spawn(executable, [`--extensionDevelopmentPath=${process.env.MYNOTES_HOST_EXTENSION_PATH ?? repo}`, `--extensionTestsPath=${path.join(repo, 'out/test/host')}`,
+    const child = spawn(executable, [`--extensionDevelopmentPath=${process.env.SYNCNOTES_HOST_EXTENSION_PATH ?? repo}`, `--extensionTestsPath=${path.join(repo, 'out/test/host')}`,
     `--user-data-dir=${userData}`, `--extensions-dir=${path.join(env.root, 'extensions')}`,
       '--disable-extensions', '--disable-gpu', '--skip-welcome', '--skip-release-notes', '--disable-workspace-trust', '--new-window', notes], {
       env: processEnv, windowsHide: true, stdio: 'pipe'

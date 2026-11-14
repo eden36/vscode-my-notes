@@ -10,7 +10,7 @@ export function isMissing(error: unknown): boolean {
   return code === 'ENOENT' || code === 'FileNotFound';
 }
 export function sharedStateDir(): vscode.Uri {
-  return vscode.Uri.file(path.join(os.homedir(), '.mynotes'));
+  return vscode.Uri.file(path.join(os.homedir(), '.syncnotes'));
 }
 /** 唯一临时文件与同目录替换避免半写状态和同进程并发冲突。 */
 export async function writeJsonAtomic(file: string, value: unknown): Promise<void> {

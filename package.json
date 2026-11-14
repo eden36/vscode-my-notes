@@ -1,9 +1,9 @@
 {
-  "name": "mynotes",
-  "displayName": "MyNotes",
+  "name": "syncnotes",
+  "displayName": "SyncNotes",
   "description": "Markdown 笔记管理，支持 Git 仓库与 WebDAV 同步",
-  "version": "0.1.0",
-  "publisher": "qunmei",
+  "version": "0.1.1",
+  "publisher": "saltcoreyan",
   "license": "MIT",
   "engines": {
     "vscode": "^1.90.0"
@@ -27,16 +27,16 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "mynotes",
-          "title": "MyNotes",
+          "id": "syncnotes",
+          "title": "SyncNotes",
           "icon": "resources/notes.svg"
         }
       ]
     },
     "views": {
-      "mynotes": [
+      "syncnotes": [
         {
-          "id": "mynotes.notesView",
+          "id": "syncnotes.notesView",
           "name": "笔记",
           "icon": "resources/notes.svg"
         }
@@ -44,247 +44,247 @@
     },
     "viewsWelcome": [
       {
-        "view": "mynotes.notesView",
-        "contents": "尚未设置笔记目录。\n[选择笔记目录](command:mynotes.setup)",
-        "when": "!mynotes.configured"
+        "view": "syncnotes.notesView",
+        "contents": "尚未设置笔记目录。\n[选择笔记目录](command:syncnotes.setup)",
+        "when": "!syncnotes.configured"
       },
       {
-        "view": "mynotes.notesView",
-        "contents": "配置的笔记目录不存在。\n[创建该目录](command:mynotes.createNotesLocation)\n[重新选择目录](command:mynotes.setup)",
-        "when": "mynotes.configured && mynotes.locationMissing"
+        "view": "syncnotes.notesView",
+        "contents": "配置的笔记目录不存在。\n[创建该目录](command:syncnotes.createNotesLocation)\n[重新选择目录](command:syncnotes.setup)",
+        "when": "syncnotes.configured && syncnotes.locationMissing"
       },
       {
-        "view": "mynotes.notesView",
-        "contents": "笔记目录为空。\n[新建笔记](command:mynotes.newNote)",
-        "when": "mynotes.configured && !mynotes.locationMissing"
+        "view": "syncnotes.notesView",
+        "contents": "笔记目录为空。\n[新建笔记](command:syncnotes.newNote)",
+        "when": "syncnotes.configured && !syncnotes.locationMissing"
       }
     ],
     "commands": [
       {
-        "command": "mynotes.setup",
+        "command": "syncnotes.setup",
         "title": "选择笔记目录",
-        "category": "MyNotes"
+        "category": "SyncNotes"
       },
       {
-        "command": "mynotes.createNotesLocation",
+        "command": "syncnotes.createNotesLocation",
         "title": "创建笔记目录",
-        "category": "MyNotes"
+        "category": "SyncNotes"
       },
       {
-        "command": "mynotes.newNote",
+        "command": "syncnotes.newNote",
         "title": "新建笔记",
-        "category": "MyNotes",
+        "category": "SyncNotes",
         "icon": "$(new-file)"
       },
       {
-        "command": "mynotes.newNoteInFolder",
+        "command": "syncnotes.newNoteInFolder",
         "title": "在此文件夹新建笔记",
-        "category": "MyNotes"
+        "category": "SyncNotes"
       },
       {
-        "command": "mynotes.newFolder",
+        "command": "syncnotes.newFolder",
         "title": "新建文件夹",
-        "category": "MyNotes",
+        "category": "SyncNotes",
         "icon": "$(new-folder)"
       },
       {
-        "command": "mynotes.newFolderInFolder",
+        "command": "syncnotes.newFolderInFolder",
         "title": "在此文件夹新建子文件夹",
-        "category": "MyNotes"
+        "category": "SyncNotes"
       },
       {
-        "command": "mynotes.renameNote",
+        "command": "syncnotes.renameNote",
         "title": "重命名笔记",
-        "category": "MyNotes"
+        "category": "SyncNotes"
       },
       {
-        "command": "mynotes.renameFolder",
+        "command": "syncnotes.renameFolder",
         "title": "重命名文件夹",
-        "category": "MyNotes"
+        "category": "SyncNotes"
       },
       {
-        "command": "mynotes.deleteNote",
+        "command": "syncnotes.deleteNote",
         "title": "删除笔记",
-        "category": "MyNotes"
+        "category": "SyncNotes"
       },
       {
-        "command": "mynotes.deleteFolder",
+        "command": "syncnotes.deleteFolder",
         "title": "删除文件夹",
-        "category": "MyNotes"
+        "category": "SyncNotes"
       },
       {
-        "command": "mynotes.refresh",
+        "command": "syncnotes.refresh",
         "title": "刷新笔记列表",
-        "category": "MyNotes",
+        "category": "SyncNotes",
         "icon": "$(refresh)"
       },
       {
-        "command": "mynotes.listNotes",
+        "command": "syncnotes.listNotes",
         "title": "检索笔记",
-        "category": "MyNotes",
+        "category": "SyncNotes",
         "icon": "$(search)"
       },
       {
-        "command": "mynotes.revealInExplorer",
+        "command": "syncnotes.revealInExplorer",
         "title": "在文件管理器中显示",
-        "category": "MyNotes"
+        "category": "SyncNotes"
       },
       {
-        "command": "mynotes.openSettings",
+        "command": "syncnotes.openSettings",
         "title": "打开设置",
-        "category": "MyNotes",
+        "category": "SyncNotes",
         "icon": "$(gear)"
       },
       {
-        "command": "mynotes.sync",
+        "command": "syncnotes.sync",
         "title": "立即同步",
-        "category": "MyNotes",
+        "category": "SyncNotes",
         "icon": "$(sync)"
       },
       {
-        "command": "mynotes.setCredential",
+        "command": "syncnotes.setCredential",
         "title": "设置同步凭据",
-        "category": "MyNotes"
+        "category": "SyncNotes"
       },
       {
-        "command": "mynotes.clearCredential",
+        "command": "syncnotes.clearCredential",
         "title": "清除同步凭据",
-        "category": "MyNotes"
+        "category": "SyncNotes"
       },
       {
-        "command": "mynotes.showLog",
+        "command": "syncnotes.showLog",
         "title": "查看同步日志",
-        "category": "MyNotes"
+        "category": "SyncNotes"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "mynotes.newNote",
-          "when": "view == mynotes.notesView",
+          "command": "syncnotes.newNote",
+          "when": "view == syncnotes.notesView",
           "group": "navigation@1"
         },
         {
-          "command": "mynotes.newFolder",
-          "when": "view == mynotes.notesView",
+          "command": "syncnotes.newFolder",
+          "when": "view == syncnotes.notesView",
           "group": "navigation@2"
         },
         {
-          "command": "mynotes.sync",
-          "when": "view == mynotes.notesView && mynotes.syncEnabled",
+          "command": "syncnotes.sync",
+          "when": "view == syncnotes.notesView && syncnotes.syncEnabled",
           "group": "navigation@3"
         },
         {
-          "command": "mynotes.refresh",
-          "when": "view == mynotes.notesView",
+          "command": "syncnotes.refresh",
+          "when": "view == syncnotes.notesView",
           "group": "navigation@4"
         },
         {
-          "command": "mynotes.openSettings",
-          "when": "view == mynotes.notesView",
+          "command": "syncnotes.openSettings",
+          "when": "view == syncnotes.notesView",
           "group": "navigation@5"
         },
         {
-          "command": "mynotes.listNotes",
-          "when": "view == mynotes.notesView",
+          "command": "syncnotes.listNotes",
+          "when": "view == syncnotes.notesView",
           "group": "1_notes@1"
         },
         {
-          "command": "mynotes.setCredential",
-          "when": "view == mynotes.notesView",
+          "command": "syncnotes.setCredential",
+          "when": "view == syncnotes.notesView",
           "group": "2_sync@1"
         },
         {
-          "command": "mynotes.showLog",
-          "when": "view == mynotes.notesView",
+          "command": "syncnotes.showLog",
+          "when": "view == syncnotes.notesView",
           "group": "2_sync@2"
         }
       ],
       "view/item/context": [
         {
-          "command": "mynotes.newNoteInFolder",
-          "when": "view == mynotes.notesView && viewItem == folder",
+          "command": "syncnotes.newNoteInFolder",
+          "when": "view == syncnotes.notesView && viewItem == folder",
           "group": "1_new@1"
         },
         {
-          "command": "mynotes.newFolderInFolder",
-          "when": "view == mynotes.notesView && viewItem == folder",
+          "command": "syncnotes.newFolderInFolder",
+          "when": "view == syncnotes.notesView && viewItem == folder",
           "group": "1_new@2"
         },
         {
-          "command": "mynotes.renameNote",
-          "when": "view == mynotes.notesView && viewItem == note",
+          "command": "syncnotes.renameNote",
+          "when": "view == syncnotes.notesView && viewItem == note",
           "group": "2_edit@1"
         },
         {
-          "command": "mynotes.renameFolder",
-          "when": "view == mynotes.notesView && viewItem == folder",
+          "command": "syncnotes.renameFolder",
+          "when": "view == syncnotes.notesView && viewItem == folder",
           "group": "2_edit@1"
         },
         {
-          "command": "mynotes.deleteNote",
-          "when": "view == mynotes.notesView && viewItem == note",
+          "command": "syncnotes.deleteNote",
+          "when": "view == syncnotes.notesView && viewItem == note",
           "group": "2_edit@2"
         },
         {
-          "command": "mynotes.deleteFolder",
-          "when": "view == mynotes.notesView && viewItem == folder",
+          "command": "syncnotes.deleteFolder",
+          "when": "view == syncnotes.notesView && viewItem == folder",
           "group": "2_edit@2"
         },
         {
-          "command": "mynotes.revealInExplorer",
-          "when": "view == mynotes.notesView",
+          "command": "syncnotes.revealInExplorer",
+          "when": "view == syncnotes.notesView",
           "group": "3_open@1"
         }
       ],
       "commandPalette": [
         {
-          "command": "mynotes.newNoteInFolder",
+          "command": "syncnotes.newNoteInFolder",
           "when": "false"
         },
         {
-          "command": "mynotes.newFolderInFolder",
+          "command": "syncnotes.newFolderInFolder",
           "when": "false"
         },
         {
-          "command": "mynotes.renameNote",
+          "command": "syncnotes.renameNote",
           "when": "false"
         },
         {
-          "command": "mynotes.renameFolder",
+          "command": "syncnotes.renameFolder",
           "when": "false"
         },
         {
-          "command": "mynotes.deleteNote",
+          "command": "syncnotes.deleteNote",
           "when": "false"
         },
         {
-          "command": "mynotes.deleteFolder",
+          "command": "syncnotes.deleteFolder",
           "when": "false"
         },
         {
-          "command": "mynotes.revealInExplorer",
+          "command": "syncnotes.revealInExplorer",
           "when": "false"
         }
       ]
     },
     "configuration": {
-      "title": "MyNotes",
+      "title": "SyncNotes",
       "properties": {
-        "mynotes.notesLocation": {
+        "syncnotes.notesLocation": {
           "type": "string",
           "default": "",
           "scope": "application",
           "ignoreSync": true,
           "markdownDescription": "笔记根目录的绝对路径。可使用 `~` 代表用户主目录。\n\n**在本机所有 Profile 之间共享，但不参与 VS Code 设置同步**——同一台电脑上换 Profile 无需重设；而不同电脑的盘符和目录结构通常不同，同步一个本机路径过去大概率无效，需要在每台设备上分别设置一次。"
         },
-        "mynotes.defaultNoteExtension": {
+        "syncnotes.defaultNoteExtension": {
           "type": "string",
           "default": "md",
           "scope": "application",
           "description": "新建笔记时，文件名未带扩展名则自动补全的扩展名。"
         },
-        "mynotes.noteExtensions": {
+        "syncnotes.noteExtensions": {
           "type": "array",
           "items": {
             "type": "string"
@@ -296,7 +296,7 @@
           "scope": "application",
           "markdownDescription": "在笔记列表中显示的文件扩展名。填入 `*` 表示显示全部文件。"
         },
-        "mynotes.sync.provider": {
+        "syncnotes.sync.provider": {
           "type": "string",
           "enum": [
             "none",
@@ -312,88 +312,88 @@
           "scope": "application",
           "description": "同步后端。"
         },
-        "mynotes.sync.onStartup": {
+        "syncnotes.sync.onStartup": {
           "type": "boolean",
           "default": true,
           "scope": "application",
           "description": "VS Code 启动后自动同步一次。"
         },
-        "mynotes.sync.onWindowFocus": {
+        "syncnotes.sync.onWindowFocus": {
           "type": "boolean",
           "default": true,
           "scope": "application",
           "description": "窗口重新获得焦点时自动同步（受冷却时间限制）。"
         },
-        "mynotes.sync.focusCooldownSeconds": {
+        "syncnotes.sync.focusCooldownSeconds": {
           "type": "number",
           "default": 300,
           "minimum": 10,
           "scope": "application",
           "description": "窗口聚焦触发同步的冷却时间（秒）。距上次同步不足该时长则跳过。"
         },
-        "mynotes.sync.onSave": {
+        "syncnotes.sync.onSave": {
           "type": "boolean",
           "default": false,
           "scope": "application",
           "description": "保存笔记后自动同步。"
         },
-        "mynotes.sync.onSaveDebounceSeconds": {
+        "syncnotes.sync.onSaveDebounceSeconds": {
           "type": "number",
           "default": 30,
           "minimum": 1,
           "scope": "application",
           "description": "保存后自动同步的防抖时长（秒）。"
         },
-        "mynotes.sync.deviceName": {
+        "syncnotes.sync.deviceName": {
           "type": "string",
           "default": "",
           "scope": "application",
           "ignoreSync": true,
           "markdownDescription": "本设备名称，用于提交信息和冲突文件命名。留空则使用主机名。\n\n**在本机所有 Profile 之间共享，但不参与 VS Code 设置同步**——同一台电脑无论用哪个 Profile 都是同一台设备；而这个值需要因设备而异，才能在冲突文件名里区分是哪台设备的修改。"
         },
-        "mynotes.sync.git.remoteUrl": {
+        "syncnotes.sync.git.remoteUrl": {
           "type": "string",
           "default": "",
           "scope": "application",
           "markdownDescription": "Git 远程仓库地址。HTTPS 地址需在设置页录入访问令牌；`git@` 开头的 SSH 地址依赖本机已配置的 SSH key。"
         },
-        "mynotes.sync.git.branch": {
+        "syncnotes.sync.git.branch": {
           "type": "string",
           "default": "main",
           "scope": "application",
           "description": "用于同步的分支名。"
         },
-        "mynotes.sync.git.commitMessageTemplate": {
+        "syncnotes.sync.git.commitMessageTemplate": {
           "type": "string",
           "default": "notes: {device} {datetime}",
           "scope": "application",
           "markdownDescription": "提交信息模板。可用占位符：`{device}`、`{datetime}`、`{count}`（本次变更文件数）。"
         },
-        "mynotes.sync.git.userName": {
+        "syncnotes.sync.git.userName": {
           "type": "string",
           "default": "",
           "scope": "application",
           "description": "写入笔记仓库的 user.name。留空则沿用全局 git 配置。"
         },
-        "mynotes.sync.git.userEmail": {
+        "syncnotes.sync.git.userEmail": {
           "type": "string",
           "default": "",
           "scope": "application",
           "description": "写入笔记仓库的 user.email。留空则沿用全局 git 配置。"
         },
-        "mynotes.sync.webdav.url": {
+        "syncnotes.sync.webdav.url": {
           "type": "string",
           "default": "",
           "scope": "application",
           "markdownDescription": "WebDAV 服务地址，例如 `https://dav.jianguoyun.com/dav/`。"
         },
-        "mynotes.sync.webdav.remotePath": {
+        "syncnotes.sync.webdav.remotePath": {
           "type": "string",
-          "default": "/mynotes",
+          "default": "/syncnotes",
           "scope": "application",
           "description": "笔记在 WebDAV 服务上的存放路径。"
         },
-        "mynotes.sync.webdav.username": {
+        "syncnotes.sync.webdav.username": {
           "type": "string",
           "default": "",
           "scope": "application",

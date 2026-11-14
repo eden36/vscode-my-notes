@@ -74,7 +74,7 @@ export class LocalFileStore {
     await fs.mkdir(path.dirname(target.fsPath), {
       recursive: true
     });
-    const temporary = path.join(path.dirname(target.fsPath), `.mynotes-tmp-${randomUUID()}`);
+    const temporary = path.join(path.dirname(target.fsPath), `.syncnotes-tmp-${randomUUID()}`);
     try {
       await fs.writeFile(temporary, content, {
         flag: 'wx'

@@ -75,7 +75,7 @@ export function registerNoteCommands(
     if (!root) {
       const choice = await vscode.window.showWarningMessage('尚未设置笔记目录。', '选择笔记目录');
       if (choice) {
-        await vscode.commands.executeCommand('mynotes.setup');
+        await vscode.commands.executeCommand('syncnotes.setup');
       }
       return undefined;
     }
@@ -196,7 +196,7 @@ export function registerNoteCommands(
   }
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('mynotes.setup', async () => {
+    vscode.commands.registerCommand('syncnotes.setup', async () => {
       const picked = await vscode.window.showOpenDialog({
         title: '选择笔记目录',
         canSelectFiles: false,
@@ -212,10 +212,10 @@ export function registerNoteCommands(
       log.info(`笔记目录已设置为 ${picked[0].fsPath}`);
     }),
 
-    vscode.commands.registerCommand('mynotes.createNotesLocation', async () => {
+    vscode.commands.registerCommand('syncnotes.createNotesLocation', async () => {
       const root = provider.rootUri;
       if (!root) {
-        await vscode.commands.executeCommand('mynotes.setup');
+        await vscode.commands.executeCommand('syncnotes.setup');
         return;
       }
       try {
@@ -228,36 +228,36 @@ export function registerNoteCommands(
       }
     }),
 
-    vscode.commands.registerCommand('mynotes.newNote', async () => {
+    vscode.commands.registerCommand('syncnotes.newNote', async () => {
       const root = await requireRoot();
       if (root) {
         await createNote(root);
       }
     }),
 
-    vscode.commands.registerCommand('mynotes.newNoteInFolder', async (item: NoteItem) => {
+    vscode.commands.registerCommand('syncnotes.newNoteInFolder', async (item: NoteItem) => {
       await createNote(item.uri);
     }),
 
-    vscode.commands.registerCommand('mynotes.newFolder', async () => {
+    vscode.commands.registerCommand('syncnotes.newFolder', async () => {
       const root = await requireRoot();
       if (root) {
         await createFolder(root);
       }
     }),
 
-    vscode.commands.registerCommand('mynotes.newFolderInFolder', async (item: NoteItem) => {
+    vscode.commands.registerCommand('syncnotes.newFolderInFolder', async (item: NoteItem) => {
       await createFolder(item.uri);
     }),
 
-    vscode.commands.registerCommand('mynotes.renameNote', (item: NoteItem) => rename(item)),
-    vscode.commands.registerCommand('mynotes.renameFolder', (item: NoteItem) => rename(item)),
-    vscode.commands.registerCommand('mynotes.deleteNote', (item: NoteItem) => remove(item)),
-    vscode.commands.registerCommand('mynotes.deleteFolder', (item: NoteItem) => remove(item)),
+    vscode.commands.registerCommand('syncnotes.renameNote', (item: NoteItem) => rename(item)),
+    vscode.commands.registerCommand('syncnotes.renameFolder', (item: NoteItem) => rename(item)),
+    vscode.commands.registerCommand('syncnotes.deleteNote', (item: NoteItem) => remove(item)),
+    vscode.commands.registerCommand('syncnotes.deleteFolder', (item: NoteItem) => remove(item)),
 
-    vscode.commands.registerCommand('mynotes.refresh', () => provider.refresh()),
+    vscode.commands.registerCommand('syncnotes.refresh', () => provider.refresh()),
 
-    vscode.commands.registerCommand('mynotes.listNotes', async () => {
+    vscode.commands.registerCommand('syncnotes.listNotes', async () => {
       const root = await requireRoot();
       if (!root) {
         return;
@@ -290,11 +290,11 @@ export function registerNoteCommands(
       }
     }),
 
-    vscode.commands.registerCommand('mynotes.revealInExplorer', async (item: NoteItem) => {
+    vscode.commands.registerCommand('syncnotes.revealInExplorer', async (item: NoteItem) => {
       await vscode.commands.executeCommand('revealFileInOS', item.uri);
     }),
 
-    vscode.commands.registerCommand('mynotes.openSettings', () => {
+    vscode.commands.registerCommand('syncnotes.openSettings', () => {
       return SettingsPanel.show(context);
     }),
   );

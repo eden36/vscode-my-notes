@@ -9,11 +9,11 @@ export function registerSyncCommands(
   manager: SyncManager,
 ): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('mynotes.sync', () => manager.requestSync('manual')),
+    vscode.commands.registerCommand('syncnotes.sync', () => manager.requestSync('manual')),
 
-    vscode.commands.registerCommand('mynotes.showLog', () => log.show()),
+    vscode.commands.registerCommand('syncnotes.showLog', () => log.show()),
 
-    vscode.commands.registerCommand('mynotes.setCredential', async () => {
+    vscode.commands.registerCommand('syncnotes.setCredential', async () => {
       const cfg = getSyncConfig();
       if (cfg.provider === 'none' || !secretKeyFor(cfg.provider, cfg)) {
         void vscode.window.showWarningMessage('请先配置同步后端及其地址，再设置凭据。');
@@ -36,7 +36,7 @@ export function registerSyncCommands(
       void vscode.window.showInformationMessage('凭据已保存。');
     }),
 
-    vscode.commands.registerCommand('mynotes.clearCredential', async () => {
+    vscode.commands.registerCommand('syncnotes.clearCredential', async () => {
       const cfg = getSyncConfig();
       if (cfg.provider === 'none' || !secretKeyFor(cfg.provider, cfg)) {
         void vscode.window.showWarningMessage('当前配置没有对应的凭据。');

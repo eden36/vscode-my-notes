@@ -81,7 +81,7 @@ export class SyncManager implements vscode.Disposable {
       }
       this.root = root;
       await this.editors.setRoot(root);
-      await vscode.commands.executeCommand('setContext', 'mynotes.syncEnabled', getSyncConfig().provider !== 'none');
+      await vscode.commands.executeCommand('setContext', 'syncnotes.syncEnabled', getSyncConfig().provider !== 'none');
       if (this.startupEnabled) {
         this.scheduleStartupSync();
       }

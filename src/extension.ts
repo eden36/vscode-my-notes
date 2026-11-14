@@ -16,7 +16,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const treeProvider = new NotesTreeProvider();
   context.subscriptions.push(treeProvider);
 
-  const treeView = vscode.window.createTreeView('mynotes.notesView', {
+  const treeView = vscode.window.createTreeView('syncnotes.notesView', {
     treeDataProvider: treeProvider,
     showCollapseAll: true,
   });
@@ -49,7 +49,7 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   syncManager.scheduleStartupSync();
-  log.info('MyNotes 已启动');
+  log.info('SyncNotes 已启动');
 }
 
 export async function deactivate(): Promise<void> {

@@ -10,7 +10,7 @@ export function isSafeRelativePath(relative: string): boolean {
       !invalid.test(segment));
 }
 export function isSyncPath(relative: string): boolean {
-  return isSafeRelativePath(relative) && relative.split('/').every(segment => !SKIPPED.has(segment) && !segment.startsWith('.mynotes-tmp-'));
+  return isSafeRelativePath(relative) && relative.split('/').every(segment => !SKIPPED.has(segment) && !segment.startsWith('.syncnotes-tmp-'));
 }
 export function isInside(root: string, target: string): boolean {
   const relative = path.relative(root, target);

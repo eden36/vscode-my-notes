@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { validateConfigUpdate } from './settings/protocol';
 
-export const CONFIG_SECTION = 'mynotes';
+export const CONFIG_SECTION = 'syncnotes';
 export interface ConfigurationIssue { key: string; value: unknown; message: string }
 
 /** 手工编辑设置文件时同样校验类型，兼容旧版的空扩展名和空分支。 */
@@ -118,7 +118,7 @@ export function getSyncConfig(issues?: ConfigurationIssue[]): SyncConfig {
     },
     webdav: {
       url: read<string>('sync.webdav.url', '').trim(),
-      remotePath: read<string>('sync.webdav.remotePath', '/mynotes').trim() || '/',
+      remotePath: read<string>('sync.webdav.remotePath', '/syncnotes').trim() || '/',
       username: read<string>('sync.webdav.username', '').trim(),
     },
   };

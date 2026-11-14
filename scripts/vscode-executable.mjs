@@ -3,7 +3,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 /** 定位已安装 VS Code 的可执行文件与本地 CLI 入口。 */
 export async function vscodeExecutable() {
-  const cli = process.env.MYNOTES_VSCODE_EXECUTABLE ?? execFileSync(process.platform === 'win32' ? 'where.exe' : 'which', ['code'], {
+  const cli = process.env.SYNCNOTES_VSCODE_EXECUTABLE ?? execFileSync(process.platform === 'win32' ? 'where.exe' : 'which', ['code'], {
     encoding: 'utf8'
   }).trim().split(/\r?\n/)[0];
   const resolved = await fs.realpath(cli);
@@ -38,5 +38,5 @@ export async function vscodeExecutable() {
       }
     }
   }
-  throw new Error('无法定位 VS Code CLI 入口，请通过 MYNOTES_VSCODE_EXECUTABLE 指定可执行文件。');
+  throw new Error('无法定位 VS Code CLI 入口，请通过 SYNCNOTES_VSCODE_EXECUTABLE 指定可执行文件。');
 }

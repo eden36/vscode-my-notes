@@ -146,7 +146,7 @@ export class WebdavTransport {
       try {
         // 不匹配的读取条件用于无副作用探测，忽略条件的服务转入兼容模式。
         await this.client.getFileContents(remotePath, { format: 'binary', details: true,
-          headers: { 'If-Match': `"mynotes-probe-${randomUUID()}"` }, signal: requestSignal(this.context) });
+          headers: { 'If-Match': `"syncnotes-probe-${randomUUID()}"` }, signal: requestSignal(this.context) });
         this.conditions = false;
       } catch (error) {
         if (statusCode(error) === 412) { this.conditions = true; }

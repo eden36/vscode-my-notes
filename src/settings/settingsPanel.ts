@@ -37,8 +37,8 @@ export class SettingsPanel {
       return SettingsPanel.current.waitForReady();
     }
     const panel = vscode.window.createWebviewPanel(
-      'mynotes.settings',
-      'MyNotes 设置',
+      'syncnotes.settings',
+      'SyncNotes 设置',
       { viewColumn: vscode.ViewColumn.Active, preserveFocus: false },
       { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'dist')] },
     );
@@ -175,11 +175,11 @@ export class SettingsPanel {
         return;
 
       case 'sync':
-        await vscode.commands.executeCommand('mynotes.sync');
+        await vscode.commands.executeCommand('syncnotes.sync');
         return;
 
       case 'openAdvancedSettings':
-        await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:qunmei.mynotes');
+        await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:saltcoreyan.syncnotes');
         return;
     }
   }
@@ -258,7 +258,7 @@ ${BODY}
 const BODY = `
 <div class="page">
   <div class="page-header">
-    <h1>MyNotes 设置</h1>
+    <h1>SyncNotes 设置</h1>
     <a id="advancedLink">在设置编辑器中打开全部原始配置项</a>
   </div>
   <p class="page-subtitle">

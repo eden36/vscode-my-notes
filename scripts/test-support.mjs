@@ -25,7 +25,7 @@ export class Uri {
   }
 }
 export async function testEnvironment() {
-  const root = await fs.mkdtemp(path.join(tmpdir(), 'mynotes-test-'));
+  const root = await fs.mkdtemp(path.join(tmpdir(), 'syncnotes-test-'));
   const settings = new Map();
   const secrets = new Map();
   const commands = new Map();
@@ -222,7 +222,7 @@ export async function testEnvironment() {
           }
           settings.set(key, value);
           configuration.fire({
-            affectsConfiguration: section => section === 'mynotes'
+            affectsConfiguration: section => section === 'syncnotes'
           });
         },
       }),
@@ -300,7 +300,7 @@ export async function testEnvironment() {
     },
     async cleanup() {
       const target = path.resolve(root);
-      if (path.dirname(target) !== path.resolve(tmpdir()) || !path.basename(target).startsWith('mynotes-test-')) {
+      if (path.dirname(target) !== path.resolve(tmpdir()) || !path.basename(target).startsWith('syncnotes-test-')) {
         throw new Error('测试清理路径无效。');
       }
       await fs.rm(target, {

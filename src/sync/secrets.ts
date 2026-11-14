@@ -9,7 +9,7 @@ export type CredentialProvider = 'git' | 'webdav';
  * 全部走 SecretStorage，不写入 settings.json。
  */
 function secretKey(provider: CredentialProvider, target: string): string {
-  return `mynotes.${provider}:${target}`;
+  return `syncnotes.${provider}:${target}`;
 }
 
 /**

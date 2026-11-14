@@ -8,9 +8,9 @@ export class SyncPresentation implements vscode.Disposable {
   private readonly status: vscode.StatusBarItem;
   private readonly subscription: vscode.Disposable;
   constructor(manager: SyncManager) {
-    this.status = vscode.window.createStatusBarItem('mynotes.sync', vscode.StatusBarAlignment.Right, 100);
-    this.status.name = 'MyNotes 同步';
-    this.status.command = 'mynotes.sync';
+    this.status = vscode.window.createStatusBarItem('syncnotes.sync', vscode.StatusBarAlignment.Right, 100);
+    this.status.name = 'SyncNotes 同步';
+    this.status.command = 'syncnotes.sync';
     this.subscription = manager.onDidChangeState(event => this.present(event));
     this.reconfigure();
   }
@@ -33,7 +33,7 @@ export class SyncPresentation implements vscode.Disposable {
         void vscode.window.showInformationMessage(event.state === 'disabled' ? '尚未启用同步。' : '尚未设置笔记目录。', '打开设置')
           .then(choice => {
             if (choice) {
-              void vscode.commands.executeCommand('mynotes.openSettings');
+              void vscode.commands.executeCommand('syncnotes.openSettings');
             }
           });
       }
@@ -65,7 +65,7 @@ export class SyncPresentation implements vscode.Disposable {
         const action = event.error instanceof SyncConfigError ? '打开设置' : '查看日志';
         void vscode.window.showErrorMessage(`同步失败：${message}`, action).then(choice => {
           if (choice === '打开设置') {
-            void vscode.commands.executeCommand('mynotes.openSettings');
+            void vscode.commands.executeCommand('syncnotes.openSettings');
           }
           else if (choice) {
             log.show();

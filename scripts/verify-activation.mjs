@@ -20,7 +20,7 @@ try {
   for (const command of packageJson.contributes.commands) {
     assert.ok(env.commands.has(command.command), command.command);
   }
-  await env.commands.get('mynotes.openSettings')();
+  await env.commands.get('syncnotes.openSettings')();
   const repairPanel = env.panels[0];
   await repairPanel.receive({ type: 'ready', requestId: 100 });
   assert.equal(repairPanel.posted.at(-1).issues.length, 2);
@@ -34,21 +34,21 @@ try {
   assert.equal((await env.trees[0].getChildren()).length, 1);
   console.log('通过 真实激活入口、命令注册与笔记树');
   env.inputs.push('新笔记');
-  await env.commands.get('mynotes.newNote')();
+  await env.commands.get('syncnotes.newNote')();
   assert.equal(await fs.readFile(path.join(notes, '新笔记.md'), 'utf8'), '');
   let note = (await env.trees[0].getChildren()).find(item => item.name === '新笔记.md');
   env.inputs.push('改名');
-  await env.commands.get('mynotes.renameNote')(note);
+  await env.commands.get('syncnotes.renameNote')(note);
   assert.equal(await fs.readFile(path.join(notes, '改名.md'), 'utf8'), '');
   note = (await env.trees[0].getChildren()).find(item => item.name === '改名.md');
   env.choices.push('删除');
-  await env.commands.get('mynotes.deleteNote')(note);
+  await env.commands.get('syncnotes.deleteNote')(note);
   await assert.rejects(fs.stat(path.join(notes, '改名.md')));
   assert.equal(await fs.readFile(path.join(notes, '已有笔记.md'), 'utf8'), '原有内容');
   console.log('通过 新建、重命名与删除入口');
-  await env.commands.get('mynotes.openSettings')();
+  await env.commands.get('syncnotes.openSettings')();
   const panel = env.panels[0];
-  await env.commands.get('mynotes.openSettings')();
+  await env.commands.get('syncnotes.openSettings')();
   assert.equal(env.panels.length, 1);
   assert.ok(panel.webview.html.includes('dist/settings.js'));
   assert.ok(panel.webview.html.includes('dist/settings.css'));
@@ -97,7 +97,7 @@ try {
   await panel.receive({ type: 'update', requestId: 8, key: 'sync.provider', value: 'none' });
   await env.flush();
   console.log('通过 启用同步后的状态栏入口');
-  await env.commands.get('mynotes.sync')();
+  await env.commands.get('syncnotes.sync')();
   assert.ok(env.messages.some(message => message.includes('尚未启用同步')));
   assert.equal(env.errors.length, 0);
   console.log('通过 未配置同步提示与异步事件');
@@ -130,9 +130,9 @@ try {
     stalled.receive = async () => {};
     return stalled;
   };
-  await assert.rejects(env.commands.get('mynotes.openSettings')(), /设置页加载超时/);
+  await assert.rejects(env.commands.get('syncnotes.openSettings')(), /设置页加载超时/);
   env.vscode.window.createWebviewPanel = createPanel;
-  await env.commands.get('mynotes.openSettings')();
+  await env.commands.get('syncnotes.openSettings')();
   assert.equal(env.panels.length, 3);
   console.log('通过 设置页加载超时后重新创建');
 }
