@@ -406,7 +406,7 @@
     "vscode:prepublish": "npm run check-types && node esbuild.mjs --production",
     "compile": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
-    "check-types": "tsc --noEmit",
+    "check-types": "tsc --noEmit && tsc -p tsconfig.webview.json",
     "lint": "eslint src",
     "compile-tests": "tsc -p .",
     "test": "npm run compile-tests && mocha \"out/test/**/*.test.js\"",
@@ -415,12 +415,19 @@
     "verify:sync-state": "node scripts/verify-sync-state.mjs",
     "debug:prep": "node scripts/setup-debug-workspace.mjs",
     "debug:reset": "node scripts/setup-debug-workspace.mjs --reset",
-    "package": "vsce package"
+    "package": "vsce package",
+    "verify:regressions": "node scripts/verify-regressions.mjs",
+    "verify:webdav": "node scripts/verify-webdav.mjs",
+    "verify:host": "npm run compile-tests && npm run compile && node scripts/verify-host.mjs",
+    "verify:package": "node scripts/verify-package.mjs",
+    "verify:coordinator": "node scripts/verify-coordinator.mjs",
+    "verify:installed": "npm run compile-tests && node scripts/verify-installed.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
     "@types/mocha": "^10.0.10",
     "@types/node": "^22.10.0",
+    "@types/proper-lockfile": "4.1.4",
     "@types/vscode": "^1.90.0",
     "@typescript-eslint/eslint-plugin": "^8.18.0",
     "@typescript-eslint/parser": "^8.18.0",
@@ -432,6 +439,7 @@
     "typescript-eslint": "^8.65.0"
   },
   "dependencies": {
+    "proper-lockfile": "4.1.2",
     "simple-git": "^3.36.0",
     "webdav": "^5.10.0"
   }

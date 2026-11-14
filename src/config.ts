@@ -1,8 +1,36 @@
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { validateConfigUpdate } from './settings/protocol';
 
 export const CONFIG_SECTION = 'mynotes';
+export interface ConfigurationIssue { key: string; value: unknown; message: string }
+
+/** 手工编辑设置文件时同样校验类型，兼容旧版的空扩展名和空分支。 */
+function readSetting<T>(cfg: vscode.WorkspaceConfiguration, key: string, fallback: T, issues?: ConfigurationIssue[]): T {
+  let value: unknown = cfg.get<unknown>(key, fallback);
+  if (typeof value === 'string' && ['defaultNoteExtension', 'sync.git.branch'].includes(key)) {
+    value = value.trim();
+  }
+  if (typeof value === 'string' && ['defaultNoteExtension', 'sync.git.branch'].includes(key) && !value.trim().replace(/^\./, '')) {
+    value = fallback;
+  }
+  if (key === 'noteExtensions' && Array.isArray(value)) {
+    value = value.map(entry => typeof entry === 'string' ? entry.trim() : entry)
+      .filter(entry => typeof entry !== 'string' || entry.length);
+  }
+  try {
+    validateConfigUpdate(key, value);
+    if (key === 'notesLocation' && typeof value === 'string' && expandHome(value) && !path.isAbsolute(expandHome(value))) {
+      throw new Error('笔记目录必须为绝对路径。');
+    }
+  } catch (error) {
+    if (!issues) { throw error; }
+    issues.push({ key, value, message: error instanceof Error ? error.message : String(error) });
+    return fallback;
+  }
+  return value as T;
+}
 
 export type SyncProviderId = 'none' | 'git' | 'webdav';
 
@@ -52,66 +80,58 @@ function expandHome(input: string): string {
   return trimmed;
 }
 
-export function getNotesConfig(): NotesConfig {
+/** 界面传入 issues 收集错误以便修复，同步任务省略参数并严格拒绝非法配置。 */
+export function getNotesConfig(issues?: ConfigurationIssue[]): NotesConfig {
   const cfg = vscode.workspace.getConfiguration(CONFIG_SECTION);
-  const rawExtensions = cfg.get<string[]>('noteExtensions', ['md', 'txt']);
+  const read = <T>(key: string, fallback: T) => readSetting(cfg, key, fallback, issues);
+  const rawExtensions = read<string[]>('noteExtensions', ['md', 'txt']);
   const normalized = rawExtensions
     .map((ext) => ext.trim().replace(/^\./, '').toLowerCase())
     .filter((ext) => ext.length > 0);
 
-  const location = expandHome(cfg.get<string>('notesLocation', ''));
-
+  const location = expandHome(read<string>('notesLocation', ''));
   return {
     notesLocation: location ? path.normalize(location) : '',
-    defaultNoteExtension: cfg.get<string>('defaultNoteExtension', 'md').trim().replace(/^\./, '') || 'md',
+    defaultNoteExtension: read<string>('defaultNoteExtension', 'md').trim().replace(/^\./, '') || 'md',
     noteExtensions: normalized.filter((ext) => ext !== '*'),
     allExtensions: normalized.includes('*'),
   };
 }
 
-export function getSyncConfig(): SyncConfig {
+export function getSyncConfig(issues?: ConfigurationIssue[]): SyncConfig {
   const cfg = vscode.workspace.getConfiguration(CONFIG_SECTION);
+  const read = <T>(key: string, fallback: T) => readSetting(cfg, key, fallback, issues);
   return {
-    provider: cfg.get<SyncProviderId>('sync.provider', 'none'),
-    onStartup: cfg.get<boolean>('sync.onStartup', true),
-    onWindowFocus: cfg.get<boolean>('sync.onWindowFocus', true),
-    focusCooldownSeconds: cfg.get<number>('sync.focusCooldownSeconds', 300),
-    onSave: cfg.get<boolean>('sync.onSave', false),
-    onSaveDebounceSeconds: cfg.get<number>('sync.onSaveDebounceSeconds', 30),
-    deviceName: cfg.get<string>('sync.deviceName', '').trim() || os.hostname(),
+    provider: read<SyncProviderId>('sync.provider', 'none'),
+    onStartup: read<boolean>('sync.onStartup', true),
+    onWindowFocus: read<boolean>('sync.onWindowFocus', true),
+    focusCooldownSeconds: read<number>('sync.focusCooldownSeconds', 300),
+    onSave: read<boolean>('sync.onSave', false),
+    onSaveDebounceSeconds: read<number>('sync.onSaveDebounceSeconds', 30),
+    deviceName: read<string>('sync.deviceName', '').trim() || os.hostname(),
     git: {
-      remoteUrl: cfg.get<string>('sync.git.remoteUrl', '').trim(),
-      branch: cfg.get<string>('sync.git.branch', 'main').trim() || 'main',
-      commitMessageTemplate: cfg.get<string>('sync.git.commitMessageTemplate', 'notes: {device} {datetime}'),
-      userName: cfg.get<string>('sync.git.userName', '').trim(),
-      userEmail: cfg.get<string>('sync.git.userEmail', '').trim(),
+      remoteUrl: read<string>('sync.git.remoteUrl', '').trim(),
+      branch: read<string>('sync.git.branch', 'main').trim() || 'main',
+      commitMessageTemplate: read<string>('sync.git.commitMessageTemplate', 'notes: {device} {datetime}'),
+      userName: read<string>('sync.git.userName', '').trim(),
+      userEmail: read<string>('sync.git.userEmail', '').trim(),
     },
     webdav: {
-      url: cfg.get<string>('sync.webdav.url', '').trim(),
-      remotePath: cfg.get<string>('sync.webdav.remotePath', '/mynotes').trim() || '/',
-      username: cfg.get<string>('sync.webdav.username', '').trim(),
+      url: read<string>('sync.webdav.url', '').trim(),
+      remotePath: read<string>('sync.webdav.remotePath', '/mynotes').trim() || '/',
+      username: read<string>('sync.webdav.username', '').trim(),
     },
   };
 }
 
-/**
- * 写回配置时选择该项当前已定义的作用域，而不是一律写用户设置。
- *
- * 工作区设置的优先级高于用户设置：若某项已写在工作区的 .vscode/settings.json 里，
- * 仍往用户设置写就会被覆盖，界面上表现为「改了没反应、值自动弹回去」。
- */
+/** application 配置统一写入用户级设置。 */
 export async function updateConfig(key: string, value: unknown): Promise<void> {
-  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
-  const inspected = config.inspect(key);
-
-  let target = vscode.ConfigurationTarget.Global;
-  if (inspected?.workspaceFolderValue !== undefined) {
-    target = vscode.ConfigurationTarget.WorkspaceFolder;
-  } else if (inspected?.workspaceValue !== undefined) {
-    target = vscode.ConfigurationTarget.Workspace;
+  validateConfigUpdate(key, value);
+  if (key === 'notesLocation' && typeof value === 'string' && value.trim() && !path.isAbsolute(expandHome(value))) {
+    throw new Error('笔记目录必须为绝对路径。');
   }
-
-  await config.update(key, value, target);
+  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+  await config.update(key, value, vscode.ConfigurationTarget.Global);
 }
 
 /** 判断文件名是否应作为笔记显示在树视图中 */

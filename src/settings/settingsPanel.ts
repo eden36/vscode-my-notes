@@ -1,21 +1,13 @@
 import * as vscode from 'vscode';
-import { getNotesConfig, getSyncConfig, updateConfig } from '../config';
+import { randomBytes } from 'crypto';
+import { getNotesConfig, getSyncConfig, updateConfig, type ConfigurationIssue } from '../config';
 import { log } from '../log';
 import { GitSyncProvider } from '../sync/git/gitSyncProvider';
 import { deleteSecretFor, getSecretFor, setSecretFor, type CredentialProvider } from '../sync/secrets';
 import { WebdavSyncProvider } from '../sync/webdav/webdavSyncProvider';
+import { parseInbound, type InboundMessage } from './protocol';
 
 /** webview → 扩展宿主 */
-type InboundMessage =
-  | { type: 'ready' }
-  | { type: 'update'; key: string; value: unknown }
-  | { type: 'browseNotesLocation' }
-  | { type: 'saveCredential'; provider: CredentialProvider; value: string }
-  | { type: 'clearCredential'; provider: CredentialProvider }
-  | { type: 'testConnection'; provider: CredentialProvider }
-  | { type: 'sync' }
-  | { type: 'openAdvancedSettings' };
-
 /** 内联反馈落在哪一块区域 */
 type ResultTarget = 'git' | 'webdav';
 
@@ -33,19 +25,25 @@ export class SettingsPanel {
   private readonly panel: vscode.WebviewPanel;
   private readonly disposables: vscode.Disposable[] = [];
   private disposed = false;
+  private version = 0;
+  private activeRequestId = 0;
+  private queue: Promise<void> = Promise.resolve();
+  private resolveReady: (() => void) | undefined;
+  private readonly ready = new Promise<void>(resolve => { this.resolveReady = resolve; });
 
-  static show(context: vscode.ExtensionContext): void {
+  static show(context: vscode.ExtensionContext): Promise<void> {
     if (SettingsPanel.current) {
       SettingsPanel.current.panel.reveal();
-      return;
+      return SettingsPanel.current.waitForReady();
     }
     const panel = vscode.window.createWebviewPanel(
       'mynotes.settings',
       'MyNotes 设置',
       { viewColumn: vscode.ViewColumn.Active, preserveFocus: false },
-      { enableScripts: true, retainContextWhenHidden: true },
+      { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'dist')] },
     );
     SettingsPanel.current = new SettingsPanel(context, panel);
+    return SettingsPanel.current.waitForReady();
   }
 
   /** 配置在别处（settings.json、其他窗口）发生变化时，若面板正开着就刷新显示 */
@@ -61,17 +59,45 @@ export class SettingsPanel {
     panel.webview.html = this.renderHtml(panel.webview);
 
     this.disposables.push(
-      panel.webview.onDidReceiveMessage((message: InboundMessage) => this.handleMessage(message)),
+      panel.webview.onDidReceiveMessage((message: unknown) => this.receive(message)),
       panel.onDidDispose(() => this.dispose()),
     );
   }
 
   private refresh(): void {
-    void this.postState();
+    this.version++;
+    void this.postState().catch(error => {
+      log.error('刷新设置页失败。', error);
+      if (!this.disposed) { void this.panel.webview.postMessage({ type: 'error', requestId: 0, message: error instanceof Error ? error.message : String(error) }); }
+    });
+  }
+
+  private receive(value: unknown): Promise<void> {
+    let message: InboundMessage;
+    try { message = parseInbound(value); }
+    catch (error) {
+      const invalid = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+      void this.panel.webview.postMessage({ type: 'error', requestId: typeof invalid.requestId === 'number' ? invalid.requestId : 0,
+        key: typeof invalid.key === 'string' ? invalid.key : undefined, message: error instanceof Error ? error.message : String(error) });
+      return Promise.resolve();
+    }
+    this.queue = this.queue.then(async () => {
+      if (this.disposed) { return; }
+      this.activeRequestId = message.requestId ?? 0;
+      try { await this.handleMessage(message); }
+      catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        log.warn(reason);
+        void this.panel.webview.postMessage({ type: 'error', requestId: this.activeRequestId,
+          key: message.type === 'update' ? message.key : undefined, message: reason });
+      } finally { this.activeRequestId = 0; }
+    });
+    return this.queue;
   }
 
   private dispose(): void {
     this.disposed = true;
+    this.resolveReady?.();
     if (SettingsPanel.current === this) {
       SettingsPanel.current = undefined;
     }
@@ -80,18 +106,30 @@ export class SettingsPanel {
     }
   }
 
+  private async waitForReady(): Promise<void> {
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([this.ready, new Promise<void>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('设置页加载超时，请重新打开。')), 10_000);
+      })]);
+    } catch (error) {
+      this.panel.dispose();
+      throw error;
+    } finally {
+      if (timer) { clearTimeout(timer); }
+    }
+  }
+
   private async handleMessage(message: InboundMessage): Promise<void> {
     switch (message.type) {
       case 'ready':
+        this.resolveReady?.();
         await this.postState();
         return;
 
       case 'update':
-        try {
-          await updateConfig(message.key, message.value);
-        } catch (err) {
-          log.error(`更新设置失败：${message.key}`, err);
-        }
+        await updateConfig(message.key, message.value);
+        this.version++;
         await this.postState();
         return;
 
@@ -115,7 +153,7 @@ export class SettingsPanel {
           this.postResult(message.provider, false, '请先输入内容再保存。');
           return;
         }
-        const saved = await setSecretFor(this.context, message.provider, message.value);
+        const saved = await setSecretFor(this.context, message.provider, message.value, this.targetConfig(message));
         this.postResult(
           message.provider,
           saved,
@@ -126,14 +164,14 @@ export class SettingsPanel {
       }
 
       case 'clearCredential': {
-        const cleared = await deleteSecretFor(this.context, message.provider);
+        const cleared = await deleteSecretFor(this.context, message.provider, this.targetConfig(message));
         this.postResult(message.provider, cleared, cleared ? '凭据已清除。' : '当前地址没有对应的凭据。');
         await this.postState();
         return;
       }
 
       case 'testConnection':
-        await this.testConnection(message.provider);
+        await this.testConnection(message.provider, this.targetConfig(message));
         return;
 
       case 'sync':
@@ -146,9 +184,18 @@ export class SettingsPanel {
     }
   }
 
-  private async testConnection(provider: CredentialProvider): Promise<void> {
+  private targetConfig(message: Extract<InboundMessage, { provider: CredentialProvider }>): ReturnType<typeof getSyncConfig> {
+    const config = getSyncConfig();
+    if (message.target) {
+      if (message.provider === 'git') { config.git.remoteUrl = message.target.url.trim(); }
+      else { config.webdav.url = message.target.url.trim(); config.webdav.username = message.target.username.trim(); }
+    }
+    return config;
+  }
+
+  private async testConnection(provider: CredentialProvider, config: ReturnType<typeof getSyncConfig>): Promise<void> {
     const backend =
-      provider === 'git' ? new GitSyncProvider(this.context) : new WebdavSyncProvider(this.context);
+      provider === 'git' ? new GitSyncProvider(this.context, config) : new WebdavSyncProvider(this.context, config);
     try {
       this.postResult(provider, true, await backend.testConnection());
     } catch (err) {
@@ -160,7 +207,7 @@ export class SettingsPanel {
 
   private postResult(target: ResultTarget, ok: boolean, message: string): void {
     if (!this.disposed) {
-      void this.panel.webview.postMessage({ type: 'result', target, ok, message });
+      void this.panel.webview.postMessage({ type: 'result', requestId: this.activeRequestId, target, ok, message });
     }
   }
 
@@ -168,121 +215,45 @@ export class SettingsPanel {
     if (this.disposed) {
       return;
     }
+    const version = this.version;
+    const requestId = this.activeRequestId;
+    const issues: ConfigurationIssue[] = [];
+    const notes = getNotesConfig(issues);
+    const config = getSyncConfig(issues);
+    const [git, webdav] = await Promise.all([getSecretFor(this.context, 'git', config), getSecretFor(this.context, 'webdav', config)]);
+    if (this.disposed || version !== this.version) { return; }
     void this.panel.webview.postMessage({
       type: 'state',
-      notes: getNotesConfig(),
-      sync: getSyncConfig(),
+      requestId, version,
+      notes,
+      sync: config,
+      issues,
       // 只回传「是否已设置」，密文本身绝不回到 webview
       credentials: {
-        git: Boolean(await getSecretFor(this.context, 'git')),
-        webdav: Boolean(await getSecretFor(this.context, 'webdav')),
+        git: Boolean(git),
+        webdav: Boolean(webdav),
       },
     });
   }
 
   private renderHtml(webview: vscode.Webview): string {
-    const nonce = createNonce();
+    const nonce = randomBytes(16).toString('hex');
+    const style = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'settings.css'));
+    const script = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'settings.js'));
     return /* html */ `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';" />
-<style>${STYLE}</style>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';" />
+<link rel="stylesheet" href="${style}" />
 </head>
 <body>
 ${BODY}
-<script nonce="${nonce}">${SCRIPT}</script>
+<script nonce="${nonce}" src="${script}"></script>
 </body>
 </html>`;
   }
 }
-
-function createNonce(): string {
-  let text = '';
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  for (let i = 0; i < 32; i++) {
-    text += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return text;
-}
-
-const STYLE = `
-  body {
-    font-family: var(--vscode-font-family);
-    font-size: var(--vscode-font-size);
-    color: var(--vscode-foreground);
-  }
-  .page { max-width: 680px; margin: 0 auto; padding: 28px 32px 60px; }
-  .page-header {
-    display: flex; align-items: baseline; justify-content: space-between; gap: 16px;
-    margin-bottom: 4px;
-  }
-  .page-header h1 { font-size: 20px; font-weight: 600; margin: 0; }
-  .page-header a { font-size: 12px; color: var(--vscode-textLink-foreground); cursor: pointer; white-space: nowrap; }
-  .page-header a:hover { color: var(--vscode-textLink-activeForeground); }
-  .page-subtitle { font-size: 12px; color: var(--vscode-descriptionForeground); margin: 0 0 28px; }
-
-  section { margin-bottom: 34px; }
-  h2 {
-    display: flex; align-items: center; gap: 10px;
-    font-size: 13px; font-weight: 600; margin: 0 0 16px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.3));
-  }
-  /* 用 !important 保证覆盖元素自身的 display，切换后端时可靠地整节隐藏 */
-  .hidden { display: none !important; }
-
-  .field { margin-bottom: 18px; }
-  .field:last-child { margin-bottom: 0; }
-  label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
-  .hint { font-size: 12px; color: var(--vscode-descriptionForeground); margin: 6px 0 0; line-height: 1.5; }
-  .local-only-badge {
-    display: inline-block;
-    font-size: 11px; font-weight: 600;
-    padding: 0 6px; border-radius: 3px;
-    background: var(--vscode-badge-background); color: var(--vscode-badge-foreground);
-    margin-right: 6px;
-    vertical-align: 1px;
-  }
-
-  input[type="text"], input[type="password"], input[type="number"], select {
-    width: 100%; box-sizing: border-box;
-    background: var(--vscode-input-background); color: var(--vscode-input-foreground);
-    border: 1px solid var(--vscode-input-border, rgba(128,128,128,0.4));
-    border-radius: 3px; padding: 7px 10px; font-size: 13px; font-family: inherit;
-  }
-  input:focus, select:focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
-  input[type="number"] { width: 110px; }
-  select { max-width: 320px; }
-
-  .row { display: flex; align-items: center; gap: 8px; }
-  .row input { flex: 1; }
-  .checkbox-field { display: flex; align-items: center; gap: 8px; }
-  .checkbox-field label { margin: 0; font-weight: normal; }
-  .inline-number { display: flex; align-items: center; gap: 8px; margin-top: 8px; margin-left: 24px; }
-  .inline-number label { margin: 0; font-size: 12px; font-weight: normal; color: var(--vscode-descriptionForeground); }
-
-  button {
-    background: var(--vscode-button-secondaryBackground, rgba(128,128,128,0.2));
-    color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
-    border: none; border-radius: 3px; padding: 6px 14px;
-    font-size: 13px; font-family: inherit; cursor: pointer; white-space: nowrap;
-  }
-  button:hover:not(:disabled) { background: var(--vscode-button-secondaryHoverBackground, rgba(128,128,128,0.3)); }
-  button:disabled { opacity: 0.5; cursor: default; }
-  button.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
-  button.primary:hover:not(:disabled) { background: var(--vscode-button-hoverBackground); }
-  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
-
-  .credential-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--vscode-descriptionForeground); margin: 8px 0 0; }
-  .credential-status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--vscode-descriptionForeground); }
-  .credential-status.set .dot { background: var(--vscode-charts-green, #3fb950); }
-
-  .result { font-size: 12px; margin: 10px 0 0; line-height: 1.5; }
-  .result:empty { display: none; }
-  .result.ok { color: var(--vscode-charts-green, #3fb950); }
-  .result.err { color: var(--vscode-errorForeground, #f14c4c); }
-`;
 
 const BODY = `
 <div class="page">
@@ -296,6 +267,7 @@ const BODY = `
     还会在你开启 VS Code 内置的设置同步（Settings Sync）后一并带到其他电脑上；
     <strong>凭据本身不受设置同步影响，换新电脑仍需重新录入</strong>。
   </p>
+  <p id="generalError" class="result err" role="alert"></p>
 
   <section>
     <h2>笔记</h2>
@@ -444,151 +416,4 @@ const BODY = `
     </div>
   </section>
 </div>
-`;
-
-/**
- * 每个字段改动即时写回配置，不设单独的保存按钮——
- * 与 VS Code 内置设置页的交互习惯保持一致。凭据是例外：
- * 明确点「保存」才提交，避免边输入边写入密钥库。
- */
-const SCRIPT = `
-  const vscode = acquireVsCodeApi();
-  const $ = (id) => document.getElementById(id);
-
-  function bindText(id, key, transform) {
-    const el = $(id);
-    el.addEventListener('change', () => {
-      vscode.postMessage({ type: 'update', key, value: transform ? transform(el.value) : el.value });
-    });
-  }
-  function bindCheckbox(id, key) {
-    const el = $(id);
-    el.addEventListener('change', () => vscode.postMessage({ type: 'update', key, value: el.checked }));
-  }
-  function bindNumber(id, key) {
-    const el = $(id);
-    el.addEventListener('change', () => {
-      const n = Number(el.value);
-      if (Number.isFinite(n)) vscode.postMessage({ type: 'update', key, value: n });
-    });
-  }
-
-  bindText('notesLocation', 'notesLocation');
-  bindText('defaultNoteExtension', 'defaultNoteExtension');
-  bindText('noteExtensions', 'noteExtensions', (v) =>
-    v.split(',').map((s) => s.trim()).filter((s) => s.length > 0)
-  );
-  bindText('provider', 'sync.provider');
-  bindCheckbox('onStartup', 'sync.onStartup');
-  bindCheckbox('onWindowFocus', 'sync.onWindowFocus');
-  bindNumber('focusCooldownSeconds', 'sync.focusCooldownSeconds');
-  bindCheckbox('onSave', 'sync.onSave');
-  bindNumber('onSaveDebounceSeconds', 'sync.onSaveDebounceSeconds');
-  bindText('deviceName', 'sync.deviceName');
-  bindText('gitRemoteUrl', 'sync.git.remoteUrl');
-  bindText('gitBranch', 'sync.git.branch');
-  bindText('gitCommitMessageTemplate', 'sync.git.commitMessageTemplate');
-  bindText('gitUserName', 'sync.git.userName');
-  bindText('gitUserEmail', 'sync.git.userEmail');
-  bindText('webdavUrl', 'sync.webdav.url');
-  bindText('webdavRemotePath', 'sync.webdav.remotePath');
-  bindText('webdavUsername', 'sync.webdav.username');
-
-  $('browseBtn').addEventListener('click', () => vscode.postMessage({ type: 'browseNotesLocation' }));
-  $('syncNowBtn').addEventListener('click', () => vscode.postMessage({ type: 'sync' }));
-  $('advancedLink').addEventListener('click', () => vscode.postMessage({ type: 'openAdvancedSettings' }));
-
-  function bindCredential(provider, inputId, saveId, clearId) {
-    $(saveId).addEventListener('click', () => {
-      const input = $(inputId);
-      vscode.postMessage({ type: 'saveCredential', provider, value: input.value });
-      input.value = '';
-    });
-    $(clearId).addEventListener('click', () => {
-      $(inputId).value = '';
-      vscode.postMessage({ type: 'clearCredential', provider });
-    });
-  }
-  bindCredential('git', 'gitToken', 'gitSaveTokenBtn', 'gitClearTokenBtn');
-  bindCredential('webdav', 'webdavPassword', 'webdavSaveTokenBtn', 'webdavClearTokenBtn');
-
-  function bindTest(provider, buttonId) {
-    $(buttonId).addEventListener('click', () => {
-      const btn = $(buttonId);
-      btn.disabled = true;
-      btn.textContent = '测试中…';
-      showResult(provider, null, '正在连接…');
-      vscode.postMessage({ type: 'testConnection', provider });
-    });
-  }
-  bindTest('git', 'gitTestBtn');
-  bindTest('webdav', 'webdavTestBtn');
-
-  const RESULT_ELEMENTS = { git: 'gitResult', webdav: 'webdavResult' };
-  const BUSY_BUTTONS = { git: ['gitTestBtn', '测试连接'], webdav: ['webdavTestBtn', '测试连接'] };
-
-  function showResult(target, ok, message) {
-    const el = $(RESULT_ELEMENTS[target]);
-    el.textContent = message;
-    el.classList.toggle('ok', ok === true);
-    el.classList.toggle('err', ok === false);
-  }
-
-  // 焦点中的字段不被自动刷新覆盖，避免打断正在输入的内容
-  function setIfNotFocused(el, value) {
-    if (document.activeElement !== el) el.value = value;
-  }
-
-  window.addEventListener('message', (event) => {
-    const message = event.data;
-
-    if (message.type === 'result') {
-      showResult(message.target, message.ok, message.message);
-      const [buttonId, label] = BUSY_BUTTONS[message.target];
-      const btn = $(buttonId);
-      btn.disabled = false;
-      btn.textContent = label;
-      return;
-    }
-
-    if (message.type !== 'state') return;
-    const { notes, sync, credentials } = message;
-
-    setIfNotFocused($('notesLocation'), notes.notesLocation);
-    setIfNotFocused($('defaultNoteExtension'), notes.defaultNoteExtension);
-    setIfNotFocused($('noteExtensions'), notes.allExtensions ? '*' : notes.noteExtensions.join(', '));
-
-    $('provider').value = sync.provider;
-    $('onStartup').checked = sync.onStartup;
-    $('onWindowFocus').checked = sync.onWindowFocus;
-    setIfNotFocused($('focusCooldownSeconds'), sync.focusCooldownSeconds);
-    $('onSave').checked = sync.onSave;
-    setIfNotFocused($('onSaveDebounceSeconds'), sync.onSaveDebounceSeconds);
-    setIfNotFocused($('deviceName'), sync.deviceName);
-
-    setIfNotFocused($('gitRemoteUrl'), sync.git.remoteUrl);
-    setIfNotFocused($('gitBranch'), sync.git.branch);
-    setIfNotFocused($('gitCommitMessageTemplate'), sync.git.commitMessageTemplate);
-    setIfNotFocused($('gitUserName'), sync.git.userName);
-    setIfNotFocused($('gitUserEmail'), sync.git.userEmail);
-
-    setIfNotFocused($('webdavUrl'), sync.webdav.url);
-    setIfNotFocused($('webdavRemotePath'), sync.webdav.remotePath);
-    setIfNotFocused($('webdavUsername'), sync.webdav.username);
-
-    // 只展示当前选中后端的参数，避免两套配置同时铺在页面上
-    $('gitSection').classList.toggle('hidden', sync.provider !== 'git');
-    $('webdavSection').classList.toggle('hidden', sync.provider !== 'webdav');
-    $('noProviderHint').classList.toggle('hidden', sync.provider !== 'none');
-    $('syncNowBtn').style.display = sync.provider === 'none' ? 'none' : '';
-
-    for (const [provider, id] of [['git', 'gitCredentialStatus'], ['webdav', 'webdavCredentialStatus']]) {
-      const el = $(id);
-      const has = credentials[provider];
-      el.classList.toggle('set', has);
-      el.querySelector('.text').textContent = has ? '已保存凭据' : '尚未保存凭据';
-    }
-  });
-
-  vscode.postMessage({ type: 'ready' });
 `;

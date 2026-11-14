@@ -68,6 +68,19 @@ const contexts = await Promise.all([
     entryPoints: ['src/sync/git/askpassMain.ts'],
     outfile: 'dist/askpassMain.js',
   }),
+  esbuild.context({
+    ...shared,
+    entryPoints: ['src/settings/webview/settings.ts'],
+    platform: 'browser',
+    target: 'es2022',
+    format: 'iife',
+    outfile: 'dist/settings.js',
+  }),
+  esbuild.context({
+    ...shared,
+    entryPoints: ['src/settings/webview/settings.css'],
+    outfile: 'dist/settings.css',
+  }),
 ]);
 
 if (watch) {

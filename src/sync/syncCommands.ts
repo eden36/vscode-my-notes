@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { getSyncConfig } from '../config';
 import { log } from '../log';
-import { currentSecretKey, deleteSecret, setSecret } from './secrets';
+import { secretKeyFor, deleteSecretFor, setSecretFor } from './secrets';
 import type { SyncManager } from './syncManager';
 
 export function registerSyncCommands(
@@ -15,7 +15,7 @@ export function registerSyncCommands(
 
     vscode.commands.registerCommand('mynotes.setCredential', async () => {
       const cfg = getSyncConfig();
-      if (!currentSecretKey()) {
+      if (cfg.provider === 'none' || !secretKeyFor(cfg.provider, cfg)) {
         void vscode.window.showWarningMessage('请先配置同步后端及其地址，再设置凭据。');
         return;
       }
@@ -32,16 +32,17 @@ export function registerSyncCommands(
       if (value === undefined) {
         return;
       }
-      await setSecret(context, value);
+      await setSecretFor(context, cfg.provider, value, cfg);
       void vscode.window.showInformationMessage('凭据已保存。');
     }),
 
     vscode.commands.registerCommand('mynotes.clearCredential', async () => {
-      if (!currentSecretKey()) {
+      const cfg = getSyncConfig();
+      if (cfg.provider === 'none' || !secretKeyFor(cfg.provider, cfg)) {
         void vscode.window.showWarningMessage('当前配置没有对应的凭据。');
         return;
       }
-      await deleteSecret(context);
+      await deleteSecretFor(context, cfg.provider, cfg);
       void vscode.window.showInformationMessage('凭据已清除。');
     }),
   );

@@ -1,4 +1,7 @@
-import type * as vscode from 'vscode';
+import * as vscode from 'vscode';
+import type { SyncConfig } from '../config';
+
+export type SyncTrigger = 'manual' | 'startup' | 'focus' | 'save';
 
 export interface ConflictInfo {
   /** 冲突笔记相对笔记根目录的路径 */
@@ -10,6 +13,10 @@ export interface ConflictInfo {
 }
 
 export interface SyncResult {
+  outcome: 'complete' | 'partial';
+  deferred: { relativePath: string; reason: string }[];
+  pending: { relativePath: string; reason: string }[];
+  pendingPush: string[];
   uploaded: string[];
   downloaded: string[];
   deletedLocal: string[];
@@ -23,6 +30,10 @@ export interface SyncResult {
 
 export function emptyResult(): SyncResult {
   return {
+    outcome: 'complete',
+    deferred: [],
+    pending: [],
+    pendingPush: [],
     uploaded: [],
     downloaded: [],
     deletedLocal: [],
@@ -42,10 +53,19 @@ export function isNoopResult(result: SyncResult): boolean {
     result.conflicts.length === 0 &&
     result.failures.length === 0 &&
     result.warnings.length === 0
+    && result.deferred.length === 0 && result.pending.length === 0 && result.pendingPush.length === 0
   );
 }
 
 export interface SyncContext {
+  taskId?: string;
+  configVersion?: number;
+  trigger?: SyncTrigger;
+  config?: Readonly<SyncConfig>;
+  identity?: string;
+  signal?: AbortSignal;
+  assertActive?(): void;
+  isEditing?(relativePath: string): Promise<boolean>;
   /** 笔记根目录 */
   root: vscode.Uri;
   /** 本设备名称，用于提交信息与冲突文件命名 */
@@ -57,6 +77,20 @@ export interface SyncContext {
   token: vscode.CancellationToken;
   /** 向进度条汇报当前步骤 */
   report(message: string): void;
+}
+
+/** 每次副作用前复查任务取消和当前锁租约。 */
+export function assertSyncActive(context: SyncContext): void {
+  if (context.token.isCancellationRequested || context.signal?.aborted) {
+    throw new vscode.CancellationError();
+  }
+  context.assertActive?.();
+}
+
+export function finishResult(result: SyncResult): SyncResult {
+  result.outcome = result.failures.length || result.deferred.length || result.pending.length || result.pendingPush.length
+    ? 'partial' : 'complete';
+  return result;
 }
 
 export interface SyncProvider {

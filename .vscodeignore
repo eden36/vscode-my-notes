@@ -5,10 +5,14 @@
 src/**
 out/**
 scripts/**
+tmp
+tmp/**
 node_modules/**
 .gitignore
 esbuild.mjs
 eslint.config.mjs
 tsconfig.json
+tsconfig.webview.json
+REFACTOR_PLAN.md
 **/*.map
 **/*.ts

@@ -3,13 +3,18 @@ import * as path from 'path';
 import { promisify } from 'util';
 import simpleGit, { CheckRepoActions, type SimpleGit } from 'simple-git';
 import * as vscode from 'vscode';
-import { getSyncConfig } from '../../config';
+import { getSyncConfig, type SyncConfig } from '../../config';
 import { log } from '../../log';
 import { exists } from '../../notes/noteFs';
-import { resolveConflictUri } from '../conflict';
+import { LocalFileStore } from '../localFileStore';
+import { isInside } from '../syncPath';
+import { canonicalFilePath, identityKey } from '../syncIdentity';
+import { writeJsonAtomic } from '../stateStore';
 import { getSecretFor } from '../secrets';
 import {
   emptyResult,
+  finishResult,
+  assertSyncActive,
   SyncConfigError,
   type ConflictInfo,
   type SyncContext,
@@ -56,10 +61,12 @@ export class GitSyncProvider implements SyncProvider {
   readonly id = 'git' as const;
   readonly displayName = 'Git 仓库';
 
-  constructor(private readonly context: vscode.ExtensionContext) {}
+  private credential: Promise<string | undefined> | undefined;
+
+  constructor(private readonly context: vscode.ExtensionContext, private readonly config: Readonly<SyncConfig> = getSyncConfig()) {}
 
   async validate(): Promise<void> {
-    const cfg = getSyncConfig();
+    const cfg = this.config;
     if (!cfg.git.remoteUrl) {
       throw new SyncConfigError('未配置 Git 远程仓库地址。');
     }
@@ -68,7 +75,7 @@ export class GitSyncProvider implements SyncProvider {
 
   /** ls-remote 不需要本地仓库，最适合用来单独验证地址与凭据是否可用 */
   async testConnection(): Promise<string> {
-    const cfg = getSyncConfig();
+    const cfg = this.config;
     await this.validate();
 
     const env = await this.buildEnv(cfg.git.remoteUrl);
@@ -88,9 +95,35 @@ export class GitSyncProvider implements SyncProvider {
   }
 
   async sync(ctx: SyncContext): Promise<SyncResult> {
-    const cfg = getSyncConfig();
+    let phase = '准备';
+    let head: string | undefined;
+    const journal = path.join(ctx.stateUri.fsPath, `git-run-${ctx.identity ?? identityKey([ctx.root.fsPath, this.config.git.remoteUrl, this.config.git.branch])}.json`);
+    const record = async (next: string, currentHead?: string) => {
+      ctx.assertActive?.();
+      const previousPhase = phase;
+      phase = next;
+      head = currentHead ?? head;
+      await writeJsonAtomic(journal, { version: 1, root: ctx.root.fsPath, branch: this.config.git.branch,
+        taskId: ctx.taskId, configVersion: ctx.configVersion, trigger: ctx.trigger,
+        phase, previousPhase, head, updatedAt: new Date().toISOString() });
+    };
+    try {
+      await record('准备');
+      return await this.syncRepository(ctx, record);
+    } catch (error) {
+      const failedPhase = phase;
+      try { await record(ctx.signal?.aborted || ctx.token.isCancellationRequested ? '已取消' : '失败'); }
+      catch { /* 租约失效或状态写入失败时保留最近一次可用记录。 */ }
+      log.warn(`Git 同步在「${failedPhase}」阶段结束，可根据 ${journal} 与仓库状态恢复。`);
+      throw error;
+    }
+  }
+
+  private async syncRepository(ctx: SyncContext, record: (phase: string, head?: string) => Promise<void>): Promise<SyncResult> {
+    const cfg = this.config;
     const result = emptyResult();
-    const git = await this.createGit(ctx.root.fsPath, cfg.git.remoteUrl);
+    assertSyncActive(ctx);
+    const git = await this.createGit(ctx.root.fsPath, cfg.git.remoteUrl, ctx);
 
     ctx.report('检查仓库状态');
     // 无条件先查归属：笔记目录一律不得位于其他 Git 仓库内部，哪怕它自己已经是
@@ -104,9 +137,6 @@ export class GitSyncProvider implements SyncProvider {
       await this.initRepository(git, ctx.root, cfg.git.branch);
     }
 
-    await this.ensureRemote(git, cfg.git.remoteUrl);
-    await this.ensureIdentity(git, cfg.git.userName, cfg.git.userEmail);
-
     const branch = await this.currentBranch(git);
     if (branch !== cfg.git.branch) {
       throw new SyncConfigError(
@@ -115,36 +145,72 @@ export class GitSyncProvider implements SyncProvider {
       );
     }
 
+    if ((await this.readUnmergedStages(git)).size || await this.hasMergeHead(git)) {
+      throw new SyncConfigError('笔记仓库有未完成的合并，请先处理保留的内容后重试。');
+    }
+    await this.ensureRemote(git, cfg.git.remoteUrl);
+    await this.ensureIdentity(git, cfg.git.userName, cfg.git.userEmail);
+
     throwIfCancelled(ctx);
 
     ctx.report('提交本地改动');
-    result.uploaded.push(...(await this.commitLocalChanges(git, ctx, cfg.git.commitMessageTemplate)));
+    const edited = await this.editedPaths(ctx, (await git.status()).files.map(file => file.path));
+    if (edited.length) {
+      result.deferred.push(...edited.map(relativePath => ({ relativePath, reason: '笔记正在编辑，本轮已延后。' })));
+      return finishResult(result);
+    }
+    result.pendingPush.push(...(await this.commitLocalChanges(git, ctx, cfg.git.commitMessageTemplate)));
+    await record('本地已提交', await this.headSha(git));
 
     for (let attempt = 1; attempt <= PUSH_MAX_ATTEMPTS; attempt++) {
       throwIfCancelled(ctx);
 
       ctx.report('拉取远端改动');
       await git.fetch(['origin', '--prune']);
+      await record('远端已拉取');
 
       const remoteRef = `refs/remotes/origin/${branch}`;
       if (await this.refExists(git, remoteRef)) {
         const before = await this.headSha(git);
+        const affected = before ? await this.diffFiles(git, before, remoteRef)
+          : splitNulList(await git.raw(['ls-tree', '-r', '--name-only', '-z', remoteRef]));
+        const editing = await this.editedPaths(ctx, affected);
+        const changed = (await git.status()).files.map(file => file.path);
+        if (editing.length || changed.length) {
+          result.deferred.push(...[...new Set([...editing, ...changed])].map(relativePath => ({ relativePath, reason: '合并前检测到正在编辑或新增修改，已延后合并。' })));
+          return finishResult(result);
+        }
 
         ctx.report('合并远端改动');
+        await record('合并中', before);
         const conflicts = await this.mergeRemote(git, ctx, `origin/${branch}`);
         result.conflicts.push(...conflicts);
 
         const after = await this.headSha(git);
+        await record('合并完成', after);
         if (before && after && before !== after) {
-          result.downloaded.push(...(await this.diffFiles(git, before, after)));
+          const deleted = splitNulList(await git.raw(['diff', '--diff-filter=D', '--name-only', '-z', before, after]));
+          const removed = new Set(deleted);
+          result.deletedLocal.push(...deleted);
+          result.downloaded.push(...(await this.diffFiles(git, before, after)).filter(relative => !removed.has(relative)));
         }
       }
 
       throwIfCancelled(ctx);
+      const remoteExists = await this.refExists(git, remoteRef);
+      const outgoing = remoteExists ? await this.diffFiles(git, remoteRef, 'HEAD') : splitNulList(await git.raw(['ls-files', '-z']));
+      const deleted = remoteExists ? splitNulList(await git.raw(['diff', '--diff-filter=D', '--name-only', '-z', remoteRef, 'HEAD'])) : [];
+      result.pendingPush = outgoing;
+      await record('推送中');
       ctx.report('推送到远端');
       try {
-        await git.push('origin', branch);
-        return result;
+        await git.push(cfg.git.remoteUrl, branch);
+        const removed = new Set(deleted);
+        result.uploaded.push(...outgoing.filter(relative => !removed.has(relative)));
+        result.deletedRemote.push(...deleted);
+        result.pendingPush = [];
+        await record('已推送', await this.headSha(git));
+        return finishResult(result);
       } catch (err) {
         if (attempt >= PUSH_MAX_ATTEMPTS || !isNonFastForward(err)) {
           throw err;
@@ -173,13 +239,16 @@ export class GitSyncProvider implements SyncProvider {
     log.info(`已在 ${root.fsPath} 初始化 Git 仓库，分支 ${branch}`);
   }
 
-  private async createGit(baseDir: string, remoteUrl: string): Promise<SimpleGit> {
+  private async createGit(baseDir: string, remoteUrl: string, context?: SyncContext): Promise<SimpleGit> {
     const git = simpleGit({
       baseDir,
       binary: 'git',
       maxConcurrentProcesses: 1,
       config: GIT_CONFIG,
       unsafe: UNSAFE_ENV_ALLOWED,
+      abort: context?.signal,
+      timeout: { block: 120_000 },
+      completion: { onClose: true, onExit: false },
     });
     git.env(await this.buildEnv(remoteUrl));
     return git;
@@ -200,7 +269,8 @@ export class GitSyncProvider implements SyncProvider {
       return base;
     }
 
-    const password = await getSecretFor(this.context, 'git');
+    this.credential ??= getSecretFor(this.context, 'git', this.config);
+    const password = await this.credential;
     if (!password) {
       return base;
     }
@@ -219,10 +289,14 @@ export class GitSyncProvider implements SyncProvider {
       log.info(`已添加远程仓库 origin：${remoteUrl}`);
       return;
     }
-    if (origin.refs.push !== remoteUrl && origin.refs.fetch !== remoteUrl) {
+    if (origin.refs.fetch !== remoteUrl) {
       // 配置是唯一事实来源，地址变更时同步更新仓库
       await git.remote(['set-url', 'origin', remoteUrl]);
       log.info(`已将 origin 地址更新为 ${remoteUrl}`);
+    }
+    if (origin.refs.push !== remoteUrl) {
+      await git.remote(['set-url', '--push', 'origin', remoteUrl]);
+      log.info('已将 origin 推送地址更新为当前同步目标');
     }
   }
 
@@ -285,11 +359,13 @@ export class GitSyncProvider implements SyncProvider {
    * 然后完成这次合并提交——绝不让仓库停留在冲突中间态。
    */
   private async mergeRemote(git: SimpleGit, ctx: SyncContext, remoteBranch: string): Promise<ConflictInfo[]> {
+    assertSyncActive(ctx);
     try {
       // 本地 init、远端已有内容的情形属于无关历史，对笔记场景应当直接合并
       await git.raw(['merge', remoteBranch, '--no-edit', '--allow-unrelated-histories']);
       return [];
     } catch (err) {
+      assertSyncActive(ctx);
       const conflicted = await this.readUnmergedStages(git);
       if (conflicted.size === 0) {
         throw err; // 并非冲突导致的失败，交给上层处理
@@ -316,14 +392,14 @@ export class GitSyncProvider implements SyncProvider {
     const cwd = ctx.root.fsPath;
 
     for (const [relativePath, stages] of conflicted) {
+      assertSyncActive(ctx);
       const hasLocal = stages.has(STAGE_LOCAL);
       const hasRemote = stages.has(STAGE_REMOTE);
       const target = vscode.Uri.joinPath(ctx.root, ...relativePath.split('/'));
 
       if (hasLocal && hasRemote) {
         // 双方都改了：本地版本留在原处，远端版本另存为副本
-        const copyUri = await resolveConflictUri(ctx.root, relativePath, ctx.deviceName);
-        await vscode.workspace.fs.writeFile(copyUri, await this.showBuffer(cwd, `:3:${relativePath}`));
+        const copyUri = await new LocalFileStore(ctx).conflict(relativePath, await this.showBuffer(cwd, `:3:${relativePath}`, ctx));
         await git.raw(['checkout', '--ours', '--', relativePath]);
         conflicts.push({
           relativePath,
@@ -340,7 +416,7 @@ export class GitSyncProvider implements SyncProvider {
         });
       } else if (!hasLocal && hasRemote) {
         // 本地删除、远端修改：恢复远端内容，避免丢掉对方的改动
-        await vscode.workspace.fs.writeFile(target, await this.showBuffer(cwd, `:3:${relativePath}`));
+        await vscode.workspace.fs.writeFile(target, await this.showBuffer(cwd, `:3:${relativePath}`, ctx));
         conflicts.push({
           relativePath,
           copyUri: target,
@@ -353,17 +429,38 @@ export class GitSyncProvider implements SyncProvider {
   }
 
   /** 按字节读取对象内容，避免图片等二进制附件在文本解码中被破坏 */
-  private async showBuffer(cwd: string, spec: string): Promise<Uint8Array> {
+  private async showBuffer(cwd: string, spec: string, context: SyncContext): Promise<Uint8Array> {
+    assertSyncActive(context);
     const { stdout } = await execFileAsync('git', ['show', spec], {
       cwd,
       encoding: 'buffer',
       maxBuffer: 128 * 1024 * 1024,
+      signal: context.signal,
+      timeout: 30_000,
     });
     return stdout as unknown as Uint8Array;
   }
 
   private async diffFiles(git: SimpleGit, from: string, to: string): Promise<string[]> {
     return splitNulList(await git.raw(['diff', '--name-only', '-z', from, to]));
+  }
+
+  private async hasMergeHead(git: SimpleGit): Promise<boolean> {
+    try { await git.raw(['rev-parse', '--verify', 'MERGE_HEAD']); return true; }
+    catch { return false; }
+  }
+
+  private async editedPaths(context: SyncContext, paths: string[]): Promise<string[]> {
+    const root = await canonicalFilePath(context.root.fsPath);
+    const dirty = await Promise.all(vscode.workspace.textDocuments.filter(document => document.isDirty && document.uri.scheme === 'file')
+      .map(document => canonicalFilePath(document.uri.fsPath)));
+    const edited = new Set<string>();
+    for (const relative of paths) {
+      assertSyncActive(context);
+      const file = await canonicalFilePath(path.join(root, relative));
+      if (dirty.some(candidate => isInside(file, candidate)) || await context.isEditing?.(relative)) { edited.add(relative); }
+    }
+    return [...edited];
   }
 }
 
@@ -387,9 +484,7 @@ function extractUserFromUrl(remoteUrl: string): string | undefined {
 }
 
 function throwIfCancelled(ctx: SyncContext): void {
-  if (ctx.token.isCancellationRequested) {
-    throw new vscode.CancellationError();
-  }
+  assertSyncActive(ctx);
 }
 
 /**
@@ -430,7 +525,7 @@ async function ensureGitignore(root: vscode.Uri): Promise<void> {
   if (await exists(uri)) {
     return;
   }
-  const content = ['.DS_Store', 'Thumbs.db', 'desktop.ini', ''].join('\n');
+  const content = ['.DS_Store', 'Thumbs.db', 'desktop.ini', 'node_modules/', '.svn/', '.hg/', '$RECYCLE.BIN/', '.mynotes-tmp-*', ''].join('\n');
   await vscode.workspace.fs.writeFile(uri, Buffer.from(content, 'utf8'));
 }
 

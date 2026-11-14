@@ -3,4 +3,5 @@ dist/
 out/
 .vscode-test/
 .dev/
+tmp/
 *.vsix

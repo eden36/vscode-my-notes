@@ -2,6 +2,18 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "编译宿主测试",
+      "type": "npm",
+      "script": "compile-tests",
+      "problemMatcher": "$tsc"
+    },
+    {
+      "label": "准备宿主测试",
+      "dependsOn": ["编译宿主测试", "compile"],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
       "label": "compile",
       "type": "npm",
       "script": "compile",

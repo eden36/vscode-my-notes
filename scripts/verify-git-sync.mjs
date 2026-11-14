@@ -1,380 +1,174 @@
-// 用真实 git 仓库验证 GitSyncProvider 依赖的命令语义与冲突处理流程。
-// 覆盖：双方修改、一方删除一方修改、新增/新增、中文文件名、无关历史合并。
-import { execFileSync } from 'child_process';
-import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, unlinkSync } from 'fs';
-import { join, dirname, resolve } from 'path';
-import { tmpdir } from 'os';
-import { fileURLToPath } from 'url';
-import Module from 'module';
+// 两个真实笔记仓库直接调用 GitSyncProvider，覆盖冲突、保护和恢复。
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { build } from 'esbuild';
-import simpleGit, { CheckRepoActions } from 'simple-git';
-
-const ROOT = join(tmpdir(), 'mynotes-git-scenarios');
-const CONFIG = ['-c', 'core.quotepath=false', '-c', 'core.autocrlf=false', '-c', 'user.name=t', '-c', 'user.email=t@t'];
-
-function git(cwd, args, opts = {}) {
-  return execFileSync('git', [...CONFIG, ...args], { cwd, encoding: opts.buffer ? 'buffer' : 'utf8' });
-}
-function tryGit(cwd, args) {
-  try { return { ok: true, out: git(cwd, args) }; }
-  catch (e) { return { ok: false, out: String(e.stdout ?? '') + String(e.stderr ?? '') }; }
-}
-
-// 与 src/sync/git/unmergedStages.ts 保持一致的解析实现
-function parseUnmergedStages(raw) {
-  const stages = new Map();
-  for (const entry of raw.split('\0')) {
-    if (!entry) continue;
-    const tab = entry.indexOf('\t');
-    if (tab < 0) continue;
-    const stage = Number(entry.slice(0, tab).trim().split(/\s+/)[2]);
-    const p = entry.slice(tab + 1);
-    if (!p || !Number.isInteger(stage) || stage < 1 || stage > 3) continue;
-    const set = stages.get(p) ?? new Set();
-    set.add(stage);
-    stages.set(p, set);
-  }
-  return stages;
-}
-
-let failures = 0;
-function check(label, actual, expected) {
-  const ok = JSON.stringify(actual) === JSON.stringify(expected);
-  if (!ok) failures++;
-  console.log(`${ok ? '  ✔' : '  ✘'} ${label}${ok ? '' : `\n      期望 ${JSON.stringify(expected)}\n      实际 ${JSON.stringify(actual)}`}`);
-}
-
-rmSync(ROOT, { recursive: true, force: true });
-mkdirSync(ROOT, { recursive: true });
-
-const REMOTE = join(ROOT, 'remote.git');
-const A = join(ROOT, 'deviceA');
-const B = join(ROOT, 'deviceB');
-
-git(ROOT, ['init', '--bare', '-b', 'main', REMOTE]);
-git(ROOT, ['clone', REMOTE, A]);
-git(ROOT, ['clone', REMOTE, B]);
-
-// 建立共同基线，含中文文件名
-writeFileSync(join(A, '工作日志.md'), '第一行\n');
-writeFileSync(join(A, 'shared.md'), 'base\n');
-writeFileSync(join(A, 'onlyA-deletes.md'), 'base\n');
-writeFileSync(join(A, 'onlyB-deletes.md'), 'base\n');
-git(A, ['add', '-A']);
-git(A, ['commit', '-m', 'base']);
-git(A, ['push', 'origin', 'main']);
-git(B, ['pull', 'origin', 'main']);
-
-console.log('\n场景 1：双方修改同一文件（含中文文件名）');
-{
-  writeFileSync(join(A, '工作日志.md'), 'A 的版本\n');
-  git(A, ['add', '-A']); git(A, ['commit', '-m', 'A']); git(A, ['push', 'origin', 'main']);
-
-  writeFileSync(join(B, '工作日志.md'), 'B 的版本\n');
-  git(B, ['add', '-A']); git(B, ['commit', '-m', 'B']);
-  git(B, ['fetch', 'origin', '--prune']);
-
-  const merge = tryGit(B, ['merge', 'origin/main', '--no-edit', '--allow-unrelated-histories']);
-  check('合并应产生冲突', merge.ok, false);
-
-  const stages = parseUnmergedStages(git(B, ['ls-files', '-u', '-z']));
-  check('中文路径未被转义', [...stages.keys()], ['工作日志.md']);
-  check('保留本地与远端两个阶段', [...(stages.get('工作日志.md') ?? [])].sort(), [1, 2, 3]);
-
-  // 按 provider 的做法：取阶段 3 存为副本，再把本地版本放回原处
-  const remoteContent = git(B, ['show', ':3:工作日志.md'], { buffer: true });
-  writeFileSync(join(B, '工作日志.conflict-B-20260802-171530.md'), remoteContent);
-  git(B, ['checkout', '--ours', '--', '工作日志.md']);
-  git(B, ['add', '-A']);
-  git(B, ['commit', '--no-edit']);
-
-  check('本地版本保持不变', readFileSync(join(B, '工作日志.md'), 'utf8'), 'B 的版本\n');
-  check('远端版本存入冲突副本', readFileSync(join(B, '工作日志.conflict-B-20260802-171530.md'), 'utf8'), 'A 的版本\n');
-  check('合并已完成，无残留冲突', git(B, ['ls-files', '-u', '-z']), '');
-
-  git(B, ['push', 'origin', 'main']);
-  git(A, ['pull', 'origin', 'main']);
-  check('A 拉取后也能看到冲突副本', existsSync(join(A, '工作日志.conflict-B-20260802-171530.md')), true);
-}
-
-console.log('\n场景 2：远端删除、本地修改');
-{
-  unlinkSync(join(A, 'onlyA-deletes.md'));
-  git(A, ['add', '-A']); git(A, ['commit', '-m', 'A 删除']); git(A, ['push', 'origin', 'main']);
-
-  writeFileSync(join(B, 'onlyA-deletes.md'), 'B 改过了\n');
-  git(B, ['add', '-A']); git(B, ['commit', '-m', 'B 修改']);
-  git(B, ['fetch', 'origin', '--prune']);
-  const merge = tryGit(B, ['merge', 'origin/main', '--no-edit', '--allow-unrelated-histories']);
-  check('合并应产生冲突', merge.ok, false);
-
-  const stages = parseUnmergedStages(git(B, ['ls-files', '-u', '-z']));
-  check('只保留本地阶段（缺阶段 3 表示远端已删）', [...(stages.get('onlyA-deletes.md') ?? [])].sort(), [1, 2]);
-
-  git(B, ['checkout', '--ours', '--', 'onlyA-deletes.md']);
-  git(B, ['add', '-A']);
-  git(B, ['commit', '--no-edit']);
-  check('本地修改被保留', readFileSync(join(B, 'onlyA-deletes.md'), 'utf8'), 'B 改过了\n');
-
-  git(B, ['push', 'origin', 'main']);
-  git(A, ['pull', 'origin', 'main']);
-  check('A 端文件被恢复', existsSync(join(A, 'onlyA-deletes.md')), true);
-}
-
-console.log('\n场景 3：本地删除、远端修改');
-{
-  writeFileSync(join(A, 'onlyB-deletes.md'), 'A 改过了\n');
-  git(A, ['add', '-A']); git(A, ['commit', '-m', 'A 修改']); git(A, ['push', 'origin', 'main']);
-
-  unlinkSync(join(B, 'onlyB-deletes.md'));
-  git(B, ['add', '-A']); git(B, ['commit', '-m', 'B 删除']);
-  git(B, ['fetch', 'origin', '--prune']);
-  const merge = tryGit(B, ['merge', 'origin/main', '--no-edit', '--allow-unrelated-histories']);
-  check('合并应产生冲突', merge.ok, false);
-
-  const stages = parseUnmergedStages(git(B, ['ls-files', '-u', '-z']));
-  check('只保留远端阶段（缺阶段 2 表示本地已删）', [...(stages.get('onlyB-deletes.md') ?? [])].sort(), [1, 3]);
-
-  // checkout --ours 在缺少阶段 2 时无法使用，改为写回阶段 3 的内容
-  const oursFails = tryGit(B, ['checkout', '--ours', '--', 'onlyB-deletes.md']);
-  check('checkout --ours 在此情形下不可用', oursFails.ok, false);
-
-  writeFileSync(join(B, 'onlyB-deletes.md'), git(B, ['show', ':3:onlyB-deletes.md'], { buffer: true }));
-  git(B, ['add', '-A']);
-  git(B, ['commit', '--no-edit']);
-  check('远端修改被恢复', readFileSync(join(B, 'onlyB-deletes.md'), 'utf8'), 'A 改过了\n');
-  check('合并已完成', git(B, ['ls-files', '-u', '-z']), '');
-  git(B, ['push', 'origin', 'main']);
-}
-
-console.log('\n场景 4：双方各自新增同名文件（无基线阶段）');
-{
-  git(A, ['pull', 'origin', 'main']);
-  writeFileSync(join(A, 'both-new.md'), 'A 新建\n');
-  git(A, ['add', '-A']); git(A, ['commit', '-m', 'A 新建']); git(A, ['push', 'origin', 'main']);
-
-  writeFileSync(join(B, 'both-new.md'), 'B 新建\n');
-  git(B, ['add', '-A']); git(B, ['commit', '-m', 'B 新建']);
-  git(B, ['fetch', 'origin', '--prune']);
-  tryGit(B, ['merge', 'origin/main', '--no-edit', '--allow-unrelated-histories']);
-
-  const stages = parseUnmergedStages(git(B, ['ls-files', '-u', '-z']));
-  check('新增/新增只有阶段 2 和 3', [...(stages.get('both-new.md') ?? [])].sort(), [2, 3]);
-
-  writeFileSync(join(B, 'both-new.conflict.md'), git(B, ['show', ':3:both-new.md'], { buffer: true }));
-  git(B, ['checkout', '--ours', '--', 'both-new.md']);
-  git(B, ['add', '-A']); git(B, ['commit', '--no-edit']);
-  check('本地新建内容保留', readFileSync(join(B, 'both-new.md'), 'utf8'), 'B 新建\n');
-  check('远端新建内容存入副本', readFileSync(join(B, 'both-new.conflict.md'), 'utf8'), 'A 新建\n');
-  git(B, ['push', 'origin', 'main']);
-}
-
-console.log('\n场景 5：本地 init 与已有内容的远端合并（无关历史）');
-{
-  const C = join(ROOT, 'deviceC');
-  mkdirSync(C);
-  git(C, ['init', '-b', 'main']);
-  writeFileSync(join(C, 'local-only.md'), 'C 本地\n');
-  git(C, ['add', '-A']); git(C, ['commit', '-m', 'C 首次']);
-  git(C, ['remote', 'add', 'origin', REMOTE]);
-  git(C, ['fetch', 'origin', '--prune']);
-
-  const withoutFlag = tryGit(C, ['merge', 'origin/main', '--no-edit']);
-  check('不加 --allow-unrelated-histories 会失败', withoutFlag.ok, false);
-
-  const withFlag = tryGit(C, ['merge', 'origin/main', '--no-edit', '--allow-unrelated-histories']);
-  check('加上该参数后合并成功', withFlag.ok, true);
-  check('本地文件保留', existsSync(join(C, 'local-only.md')), true);
-  check('远端文件合入', existsSync(join(C, '工作日志.md')), true);
-}
-
-console.log('\n场景 6：符号引用与暂存清单');
-{
-  check('symbolic-ref 可读出分支名', git(B, ['symbolic-ref', '--short', 'HEAD']).trim(), 'main');
-  writeFileSync(join(B, '带 空格 和#号.md'), 'x\n');
-  git(B, ['add', '-A']);
-  const staged = git(B, ['diff', '--cached', '--name-only', '-z']).split('\0').filter(Boolean);
-  check('特殊字符文件名原样输出', staged, ['带 空格 和#号.md']);
-  git(B, ['commit', '-m', 'cleanup']);
-}
-
-console.log('\n场景 7：笔记目录位于另一个仓库内部');
-{
-  // 笔记目录没有自己的 .git，却落在某个项目仓库的工作树内时，默认的 checkIsRepo()
-  // 会一路向上找到那个项目仓库并把它当成笔记仓库，随后的 add -A / commit / push
-  // 会把项目源码推到笔记远端，remote set-url 还会改掉它的 origin
-  const outer = join(ROOT, 'outer-project');
-  mkdirSync(outer, { recursive: true });
-  git(outer, ['init', '-b', 'master', '.']);
-  writeFileSync(join(outer, 'source.ts'), 'export const x = 1;\n');
-  git(outer, ['add', '-A']);
-  git(outer, ['commit', '-m', 'project']);
-
-  const nested = join(outer, 'notes');
-  mkdirSync(nested, { recursive: true });
-  writeFileSync(join(nested, '笔记.md'), '内容\n');
-
-  check('子目录会向上解析到外层仓库', git(nested, ['rev-parse', '--show-toplevel']).trim().endsWith('outer-project'), true);
-  check('默认的工作树判断把外层仓库当成了笔记仓库',
-    await simpleGit({ baseDir: nested }).checkIsRepo(CheckRepoActions.IN_TREE), true);
-  check('仓库根判断正确识别出笔记目录不是仓库',
-    await simpleGit({ baseDir: nested }).checkIsRepo(CheckRepoActions.IS_REPO_ROOT), false);
-  check('误判时读到的分支来自外层仓库', git(nested, ['rev-parse', '--abbrev-ref', 'HEAD']).trim(), 'master');
-
-  // 笔记目录本身就是仓库根的正常情形不能被误伤
-  const proper = join(ROOT, 'proper-notes');
-  mkdirSync(proper, { recursive: true });
-  git(proper, ['init', '-b', 'main', '.']);
-  check('笔记目录本身是仓库根时通过检查',
-    await simpleGit({ baseDir: proper }).checkIsRepo(CheckRepoActions.IS_REPO_ROOT), true);
-}
-
-console.log('\n场景 8：首次同步自动初始化本地仓库');
-{
-  // 设置页不再有「初始化本地仓库」按钮，仓库改由首次同步就地建立。
-  // 这条链路会真的 init / commit / push，必须端到端验证一次。
-  const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-  const outfile = join(repoRoot, '.dev', 'verify-git-provider.cjs');
-  mkdirSync(dirname(outfile), { recursive: true });
-  await build({
-    stdin: {
-      contents: "export { GitSyncProvider } from './src/sync/git/gitSyncProvider';",
-      resolveDir: repoRoot,
-      loader: 'ts',
-    },
-    bundle: true,
-    format: 'cjs',
-    platform: 'node',
-    // 产物放在仓库内，simple-git 可从 node_modules 正常解析，不必打包进来
-    external: ['vscode', 'simple-git'],
-    outfile,
+import * as fs from 'node:fs/promises';
+import { writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { loadSource, testEnvironment, Uri } from './test-support.mjs';
+const env = await testEnvironment();
+const git = (cwd, args) => execFileSync('git', ['-c', 'core.autocrlf=false', '-c', 'user.name=测试', '-c', 'user.email=test@example.invalid', ...args], {
+  cwd, encoding: 'utf8', stdio: 'pipe'
+});
+try {
+  const api = await loadSource("export { GitSyncProvider } from './src/sync/git/gitSyncProvider'; export { getSyncConfig } from './src/config'; export { buildAskpassEnv } from './src/sync/git/askpass'; export { secretKeyFor } from './src/sync/secrets';", env.vscode);
+  const remote = path.join(env.root, 'remote.git');
+  git(env.root, ['init', '--bare', '-b', 'main', remote]);
+  env.settings.set('sync.provider', 'git');
+  env.settings.set('sync.git.remoteUrl', remote);
+  env.settings.set('sync.git.userName', '测试');
+  env.settings.set('sync.git.userEmail', 'test@example.invalid');
+  const a = path.join(env.root, 'device-A');
+  const b = path.join(env.root, 'device-B');
+  await fs.mkdir(a);
+  await fs.mkdir(b);
+  const makeContext = (root, extra = {}) => ({
+    root: Uri.file(root), deviceName: path.basename(root),
+    stateUri: Uri.file(path.join(env.root, 'state')), legacyStateUri: env.context.globalStorageUri,
+    token: {
+      isCancellationRequested: false
+    }, signal: new AbortController().signal, report() {
+    }, ...extra
   });
-
-  class Uri {
-    constructor(p) { this.fsPath = p; this.scheme = 'file'; }
-    static file(p) { return new Uri(p); }
-    static joinPath(base, ...segs) { return new Uri(join(base.fsPath, ...segs)); }
-    get path() { return this.fsPath.replace(/\\/g, '/'); }
-    toString() { return 'file:///' + this.fsPath.replace(/\\/g, '/'); }
-  }
-
-  const settings = new Map();
-  const vscodeStub = {
-    Uri,
-    CancellationError: class CancellationError extends Error {},
-    FileSystemError: class FileSystemError extends Error {},
-    workspace: {
-      textDocuments: [],
-      getConfiguration: () => ({ get: (key, dflt) => (settings.has(key) ? settings.get(key) : dflt) }),
-      fs: {
-        async readFile(uri) { return new Uint8Array(readFileSync(uri.fsPath)); },
-        async writeFile(uri, content) { writeFileSync(uri.fsPath, Buffer.from(content)); },
-        async stat(uri) { if (!existsSync(uri.fsPath)) throw new Error('不存在'); return { type: 1 }; },
-        async createDirectory(uri) { mkdirSync(uri.fsPath, { recursive: true }); },
-      },
-    },
-    window: { createOutputChannel: () => ({ info() {}, warn() {}, error() {}, trace() {}, show() {} }) },
-  };
-
-  const originalLoad = Module._load;
-  Module._load = function (request, ...rest) {
-    if (request === 'vscode') return vscodeStub;
-    return originalLoad.call(this, request, ...rest);
-  };
-  const { GitSyncProvider } = Module.createRequire(import.meta.url)(outfile);
-
-  const context = { secrets: { get: async () => undefined, store: async () => {}, delete: async () => {} } };
-  const makeCtx = (root) => ({
-    root: Uri.file(root),
-    deviceName: '测试设备',
-    stateUri: Uri.file(join(ROOT, 'state')),
-    legacyStateUri: Uri.file(join(ROOT, 'legacy')),
-    token: { isCancellationRequested: false },
-    report() {},
+  const sync = (root, extra) => new api.GitSyncProvider(env.context, api.getSyncConfig()).sync(makeContext(root, extra));
+  await fs.writeFile(path.join(a, '中文笔记.md'), '基线\n');
+  await sync(a);
+  await sync(b);
+  assert.equal(await fs.readFile(path.join(b, '中文笔记.md'), 'utf8'), '基线\n');
+  console.log('通过 首次初始化、空远端和无关历史合并');
+  await fs.writeFile(path.join(a, '中文笔记.md'), '设备 A\n');
+  await fs.writeFile(path.join(b, '中文笔记.md'), '设备 B\n');
+  await sync(a);
+  const conflict = await sync(b);
+  assert.equal(conflict.conflicts.length, 1);
+  assert.equal(await fs.readFile(path.join(b, '中文笔记.md'), 'utf8'), '设备 B\n');
+  assert.equal(await fs.readFile(conflict.conflicts[0].copyUri.fsPath, 'utf8'), '设备 A\n');
+  assert.equal(git(b, ['ls-files', '-u']), '');
+  await sync(a);
+  console.log('通过 双方修改、中文路径和实际冲突副本');
+  await fs.unlink(path.join(a, '中文笔记.md'));
+  await fs.writeFile(path.join(b, '中文笔记.md'), '删除冲突中的修改\n');
+  await sync(a);
+  await sync(b);
+  await sync(a);
+  assert.equal(await fs.readFile(path.join(a, '中文笔记.md'), 'utf8'), '删除冲突中的修改\n');
+  console.log('通过 远端删除与本地修改');
+  await fs.unlink(path.join(b, '中文笔记.md'));
+  await fs.writeFile(path.join(a, '中文笔记.md'), '远端需要恢复\n');
+  await sync(a);
+  await sync(b);
+  assert.equal(await fs.readFile(path.join(b, '中文笔记.md'), 'utf8'), '远端需要恢复\n');
+  console.log('通过 本地删除与远端修改');
+  await fs.writeFile(path.join(a, '双方新增.md'), '新增 A');
+  await fs.writeFile(path.join(b, '双方新增.md'), '新增 B');
+  await sync(a);
+  assert.equal((await sync(b)).conflicts.length, 1);
+  await sync(a);
+  console.log('通过 双方新增同名文件');
+  const binary = Buffer.from([0, 255, 128, 10, 13, 42]);
+  await fs.writeFile(path.join(a, '附件.bin'), binary);
+  await sync(a);
+  await sync(b);
+  assert.deepEqual(await fs.readFile(path.join(b, '附件.bin')), binary);
+  console.log('通过 二进制附件');
+  const aliasB = path.join(env.root, 'device-B-alias');
+  await fs.symlink(b, aliasB, process.platform === 'win32' ? 'junction' : 'dir');
+  env.vscode.workspace.textDocuments = [{
+    uri: Uri.file(path.join(aliasB, '中文笔记.md')), isDirty: true
+  }];
+  await fs.writeFile(path.join(a, '无关远端修改.md'), '可正常拉取');
+  await sync(a);
+  assert.equal((await sync(b)).outcome, 'complete');
+  assert.equal(await fs.readFile(path.join(b, '无关远端修改.md'), 'utf8'), '可正常拉取');
+  console.log('通过 无关未保存笔记不阻断同步');
+  await fs.writeFile(path.join(a, '中文笔记.md'), '相关远端修改');
+  await sync(a);
+  const dirty = await sync(b);
+  assert.equal(dirty.outcome, 'partial');
+  assert.ok(dirty.deferred.length);
+  env.vscode.workspace.textDocuments = [];
+  await fs.writeFile(path.join(a, '中文笔记.md'), '共享编辑保护');
+  await sync(a);
+  const before = await fs.readFile(path.join(b, '中文笔记.md'), 'utf8');
+  const sharedDirty = await sync(b, {
+    isEditing: async (relative) => relative === '中文笔记.md'
   });
-
-  const autoRemote = join(ROOT, 'auto-remote.git');
-  git(ROOT, ['init', '--bare', '-b', 'main', autoRemote]);
-  settings.set('sync.provider', 'git');
-  settings.set('sync.git.remoteUrl', autoRemote);
-  settings.set('sync.git.branch', 'main');
-  settings.set('sync.git.userName', 't');
-  settings.set('sync.git.userEmail', 't@t');
-  settings.set('sync.deviceName', '测试设备');
-
-  // 全新的笔记目录：还不是仓库，也不在任何仓库内
-  const autoNotes = join(ROOT, 'auto-init-notes');
-  mkdirSync(autoNotes, { recursive: true });
-  writeFileSync(join(autoNotes, '第一条笔记.md'), '内容\n');
-
-  await new GitSyncProvider(context).sync(makeCtx(autoNotes));
-
-  check('笔记目录已成为仓库根', existsSync(join(autoNotes, '.git')), true);
-  check('分支为配置的 main', git(autoNotes, ['rev-parse', '--abbrev-ref', 'HEAD']).trim(), 'main');
-  check('已补上 .gitignore', existsSync(join(autoNotes, '.gitignore')), true);
-  check('origin 指向配置的远端', git(autoNotes, ['remote', 'get-url', 'origin']).trim(), autoRemote);
-  check('笔记已推送到远端', git(ROOT, ['--git-dir', autoRemote, 'ls-tree', '--name-only', 'main']).includes('第一条笔记.md'), true);
-
-  // 笔记目录在别的仓库里时绝不能自动 init，更不能碰那个仓库
-  const guarded = join(ROOT, 'guarded-project');
-  mkdirSync(guarded, { recursive: true });
-  git(guarded, ['init', '-b', 'master', '.']);
-  writeFileSync(join(guarded, 'source.ts'), 'export const x = 1;\n');
-  git(guarded, ['add', '-A']);
-  git(guarded, ['commit', '-m', 'project']);
-  const headBefore = git(guarded, ['rev-parse', 'HEAD']).trim();
-
-  const guardedNotes = join(guarded, 'notes');
-  mkdirSync(guardedNotes, { recursive: true });
-  writeFileSync(join(guardedNotes, '笔记.md'), '内容\n');
-
-  let blocked = '';
-  try {
-    await new GitSyncProvider(context).sync(makeCtx(guardedNotes));
-  } catch (err) {
-    blocked = err instanceof Error ? err.message : String(err);
-  }
-
-  check('位于其他仓库内部时中止同步', blocked.includes('内部'), true);
-  check('没有在笔记目录建出嵌套仓库', existsSync(join(guardedNotes, '.git')), false);
-  check('外层仓库没有被提交', git(guarded, ['rev-parse', 'HEAD']).trim(), headBefore);
-  check('外层仓库没有被加上 origin', tryGit(guarded, ['remote', 'get-url', 'origin']).ok, false);
-  check('外层仓库仍在原来的分支上', git(guarded, ['rev-parse', '--abbrev-ref', 'HEAD']).trim(), 'master');
-
-  // 笔记目录自己已经是仓库根、但仍嵌套在别的仓库里：同样不允许同步。
-  // 这一条只查笔记目录自身是查不出来的——在它内部 rev-parse 只会得到它自己
-  const nestedNotes = join(guarded, 'nested-notes');
-  mkdirSync(nestedNotes, { recursive: true });
-  git(nestedNotes, ['init', '-b', 'main', '.']);
-  writeFileSync(join(nestedNotes, '笔记.md'), '内容\n');
-  const nestedHeadBefore = git(guarded, ['rev-parse', 'HEAD']).trim();
-
-  let nestedBlocked = '';
-  try {
-    await new GitSyncProvider(context).sync(makeCtx(nestedNotes));
-  } catch (err) {
-    nestedBlocked = err instanceof Error ? err.message : String(err);
-  }
-
-  check('嵌套仓库同样被拒绝同步', nestedBlocked.includes('内部'), true);
-  check('嵌套的笔记仓库没有被加上 origin', tryGit(nestedNotes, ['remote', 'get-url', 'origin']).ok, false);
-  check('嵌套情形下外层仓库也没有被提交', git(guarded, ['rev-parse', 'HEAD']).trim(), nestedHeadBefore);
-
-  // 独立存放的笔记仓库不能被这条规则误伤
-  const standalone = join(ROOT, 'standalone-notes');
-  mkdirSync(standalone, { recursive: true });
-  writeFileSync(join(standalone, '笔记.md'), '内容\n');
-  const standaloneRemote = join(ROOT, 'standalone-remote.git');
-  git(ROOT, ['init', '--bare', '-b', 'main', standaloneRemote]);
-  settings.set('sync.git.remoteUrl', standaloneRemote);
-
-  await new GitSyncProvider(context).sync(makeCtx(standalone));
-  check('仓库外的笔记目录正常完成同步', existsSync(join(standalone, '.git')), true);
-
-  Module._load = originalLoad;
-  rmSync(outfile, { force: true });
+  assert.equal(sharedDirty.outcome, 'partial');
+  assert.equal(await fs.readFile(path.join(b, '中文笔记.md'), 'utf8'), before);
+  await sync(b);
+  console.log('通过 目录别名下当前窗口与共享编辑状态保护');
+  await fs.writeFile(path.join(a, '并发提交.md'), '本地提交');
+  let changed = false;
+  const deferred = await sync(a, {
+    report(message) {
+      if (message === '拉取远端改动' && !changed) {
+        changed = true;
+        writeFileSync(path.join(a, '同步期间修改.md'), '新修改');
+      }
+    }
+  });
+  assert.equal(deferred.outcome, 'partial');
+  assert.ok(deferred.pendingPush.length);
+  await sync(a);
+  console.log('通过 提交后的磁盘修改延后与下轮恢复');
+  const controller = new AbortController();
+  await assert.rejects(() => sync(a, {
+    signal: controller.signal, report(message) {
+      if (message === '拉取远端改动') {
+        controller.abort();
+      }
+    }
+  }));
+  await sync(a);
+  console.log('通过 Git 请求取消与后续恢复');
+  await fs.writeFile(path.join(b, '推送竞争.md'), '本地待推送');
+  let pushed = false;
+  const retried = await sync(b, {
+    report(message) {
+      if (message === '推送到远端' && !pushed) {
+        pushed = true;
+        writeFileSync(path.join(a, '远端竞争.md'), '另一设备的新提交');
+        git(a, ['add', '-A']);
+        git(a, ['commit', '-m', '测试推送竞争']);
+        git(a, ['push', 'origin', 'main']);
+      }
+    }
+  });
+  assert.equal(retried.outcome, 'complete');
+  assert.equal(await fs.readFile(path.join(b, '远端竞争.md'), 'utf8'), '另一设备的新提交');
+  console.log('通过 推送被拒后的有限重试');
+  const alternate = path.join(env.root, 'alternate.git');
+  git(env.root, ['init', '--bare', '-b', 'main', alternate]);
+  git(b, ['remote', 'set-url', '--push', 'origin', alternate]);
+  await sync(b);
+  assert.equal(git(b, ['remote', 'get-url', '--push', 'origin']).trim(), remote);
+  console.log('通过 独立推送地址与配置目标一致');
+  const fixtureExtension = path.join(env.root, 'fixture-extension');
+  await build({ entryPoints: ['src/sync/git/askpassMain.ts'], bundle: true, platform: 'node', outfile: path.join(fixtureExtension, 'dist', 'askpassMain.js') });
+  env.context.extensionUri = Uri.file(fixtureExtension);
+  env.context.globalStorageUri = Uri.file(path.join(env.root, '凭据 wrapper'));
+  env.secrets.set(api.secretKeyFor('git', api.getSyncConfig()), 'fixture-token');
+  await sync(b);
+  const askpass = await api.buildAskpassEnv(env.context, { username: 'fixture-user', password: 'fixture-token' });
+  const emptyConfig = path.join(env.root, 'empty-git-config');
+  await fs.writeFile(emptyConfig, '');
+  const credentialEnv = { ...process.env, ...askpass, GIT_CONFIG_GLOBAL: emptyConfig, GIT_CONFIG_SYSTEM: emptyConfig,
+    GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_COUNT: '0', GIT_CONFIG_PARAMETERS: '', GIT_TERMINAL_PROMPT: '0' };
+  delete credentialEnv.GIT_DIR;
+  delete credentialEnv.GIT_WORK_TREE;
+  delete credentialEnv.GIT_INDEX_FILE;
+  const filled = execFileSync('git', ['-c', 'credential.helper=', 'credential', 'fill'], { cwd: env.root, env: credentialEnv,
+    input: 'protocol=https\nhost=example.invalid\n\n', encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+  assert.ok(filled.includes('username=fixture-user'));
+  assert.ok(filled.includes('password=fixture-token'));
+  console.log('通过 访问令牌环境、真实 askpass 与含空格中文路径');
+  const nested = path.join(a, 'nested');
+  await fs.mkdir(nested);
+  await assert.rejects(() => sync(nested), error => String(error).includes('内部'));
+  env.settings.set('sync.git.branch', 'other');
+  await assert.rejects(() => sync(b), error => String(error).includes('不一致'));
+  console.log('通过 嵌套仓库与分支校验');
 }
-
-console.log(`\n${failures === 0 ? '全部场景通过' : `${failures} 项断言失败`}`);
-rmSync(ROOT, { recursive: true, force: true });
-process.exit(failures === 0 ? 0 : 1);
+finally {
+  await env.cleanup();
+}

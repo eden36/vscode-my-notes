@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { getSyncConfig } from '../config';
+import { getSyncConfig, type SyncConfig } from '../config';
 
 /** 需要凭据的同步后端（`none` 不涉及凭据） */
 export type CredentialProvider = 'git' | 'webdav';
@@ -16,23 +16,23 @@ function secretKey(provider: CredentialProvider, target: string): string {
  * 取得指定后端当前配置对应的凭据键；对应地址未填写时返回 undefined。
  * 按后端而非「当前启用的后端」取键，设置页才能同时管理 Git 与 WebDAV 两套凭据。
  */
-export function secretKeyFor(provider: CredentialProvider): string | undefined {
-  const cfg = getSyncConfig();
+export function secretKeyFor(provider: CredentialProvider, cfg: Readonly<SyncConfig> = getSyncConfig()): string | undefined {
   const target = provider === 'git' ? cfg.git.remoteUrl : cfg.webdav.url;
-  return target ? secretKey(provider, target) : undefined;
+  return target ? secretKey(provider, provider === 'webdav' ? JSON.stringify([target, cfg.webdav.username]) : target) : undefined;
 }
 
 /** 返回当前启用的后端对应的凭据键；未启用同步或配置不完整时返回 undefined */
 export function currentSecretKey(): string | undefined {
-  const provider = getSyncConfig().provider;
-  return provider === 'none' ? undefined : secretKeyFor(provider);
+  const config = getSyncConfig();
+  return config.provider === 'none' ? undefined : secretKeyFor(config.provider, config);
 }
 
 export async function getSecretFor(
   context: vscode.ExtensionContext,
   provider: CredentialProvider,
+  config: Readonly<SyncConfig> = getSyncConfig(),
 ): Promise<string | undefined> {
-  const key = secretKeyFor(provider);
+  const key = secretKeyFor(provider, config);
   return key ? context.secrets.get(key) : undefined;
 }
 
@@ -40,8 +40,9 @@ export async function setSecretFor(
   context: vscode.ExtensionContext,
   provider: CredentialProvider,
   value: string,
+  config: Readonly<SyncConfig> = getSyncConfig(),
 ): Promise<boolean> {
-  const key = secretKeyFor(provider);
+  const key = secretKeyFor(provider, config);
   if (!key) {
     return false;
   }
@@ -52,8 +53,9 @@ export async function setSecretFor(
 export async function deleteSecretFor(
   context: vscode.ExtensionContext,
   provider: CredentialProvider,
+  config: Readonly<SyncConfig> = getSyncConfig(),
 ): Promise<boolean> {
-  const key = secretKeyFor(provider);
+  const key = secretKeyFor(provider, config);
   if (!key) {
     return false;
   }

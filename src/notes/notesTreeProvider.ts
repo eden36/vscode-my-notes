@@ -11,7 +11,7 @@ export class NotesTreeProvider implements vscode.TreeDataProvider<NoteItem>, vsc
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<NoteItem | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
-  private config: NotesConfig = getNotesConfig();
+  private config: NotesConfig = getNotesConfig([]);
   private watcher: vscode.FileSystemWatcher | undefined;
   private refreshTimer: NodeJS.Timeout | undefined;
 
@@ -21,7 +21,7 @@ export class NotesTreeProvider implements vscode.TreeDataProvider<NoteItem>, vsc
 
   /** 配置变更后重新读取设置、重建文件监听并刷新视图 */
   async reconfigure(): Promise<void> {
-    this.config = getNotesConfig();
+    this.config = getNotesConfig([]);
     this.watcher?.dispose();
     this.watcher = undefined;
 

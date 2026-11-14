@@ -19,9 +19,12 @@
       "request": "launch",
       "args": [
         "--extensionDevelopmentPath=${workspaceFolder}",
-        "--extensionTestsPath=${workspaceFolder}/out/test/suite/index"
+        "--extensionTestsPath=${workspaceFolder}/out/test/host",
+        "--user-data-dir=${workspaceFolder}/.dev/host-test-user-data",
+        "--extensions-dir=${workspaceFolder}/.dev/host-test-extensions"
       ],
-      "outFiles": ["${workspaceFolder}/out/test/**/*.js"]
+      "outFiles": ["${workspaceFolder}/out/test/**/*.js"],
+      "preLaunchTask": "准备宿主测试"
     }
   ]
 }

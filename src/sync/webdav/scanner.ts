@@ -1,5 +1,6 @@
 import { createHash } from 'crypto';
 import * as vscode from 'vscode';
+import { isSyncPath } from '../syncPath';
 
 export interface LocalFile {
   size: number;
@@ -30,6 +31,9 @@ export async function scanLocal(root: vscode.Uri): Promise<Map<string, LocalFile
     const entries = await vscode.workspace.fs.readDirectory(dir);
     for (const [name, type] of entries) {
       const relativePath = prefix ? `${prefix}/${name}` : name;
+      if (!isSyncPath(relativePath) || (type & vscode.FileType.SymbolicLink)) {
+        continue;
+      }
       if (type & vscode.FileType.Directory) {
         if (SKIPPED_DIRS.has(name)) {
           continue;

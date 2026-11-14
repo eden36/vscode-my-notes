@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { isMissing } from '../sync/stateStore';
 import { isNoteFile, type NotesConfig } from '../config';
 
 /** Windows 保留的设备名，用作文件名会直接失败 */
@@ -44,8 +45,11 @@ export async function exists(uri: vscode.Uri): Promise<boolean> {
   try {
     await vscode.workspace.fs.stat(uri);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if (isMissing(error)) {
+      return false;
+    }
+    throw error;
   }
 }
 

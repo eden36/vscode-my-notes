@@ -34,6 +34,10 @@ function planOne(
 }
 
 describe('planSync 三方对比', () => {
+  it('普通原型属性名称作为新增文件处理', () => {
+    const local = new Map([['constructor', { size: 1, hash: 'new' }]]);
+    assert.strictEqual(planSync({}, local, new Map())[0].type, 'upload');
+  });
   describe('无基线（首次同步或清单丢失）', () => {
     it('仅本地存在 → 上传', () => {
       assert.strictEqual(planOne(undefined, localFile('H1'), undefined), 'upload');

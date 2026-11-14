@@ -3,6 +3,7 @@ import type { LocalFile } from './scanner';
 
 export interface RemoteFile {
   size: number;
+  hash?: string;
   etag?: string;
   lastmod?: string;
 }
@@ -37,6 +38,9 @@ export function localChanged(base: ManifestEntry, local: LocalFile): boolean {
 }
 
 export function remoteChanged(base: ManifestEntry, remote: RemoteFile): boolean {
+  if (remote.hash) {
+    return base.hash !== remote.hash;
+  }
   // ETag 是服务端给出的内容标识，优先采用；缺失时退化为大小与修改时间
   if (base.remoteEtag && remote.etag) {
     return normalizeEtag(base.remoteEtag) !== normalizeEtag(remote.etag);
@@ -58,7 +62,7 @@ export function planSync(
   const actions: SyncAction[] = [];
 
   for (const path of [...paths].sort()) {
-    const b = base[path];
+    const b = Object.hasOwn(base, path) ? base[path] : undefined;
     const l = local.get(path);
     const r = remote.get(path);
 

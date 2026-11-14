@@ -1,0 +1,75 @@
+body {
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size);
+    color: var(--vscode-foreground);
+  }
+  .page { max-width: 680px; margin: 0 auto; padding: 28px 32px 60px; }
+  .page-header {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 16px;
+    margin-bottom: 4px;
+  }
+  .page-header h1 { font-size: 20px; font-weight: 600; margin: 0; }
+  .page-header a { font-size: 12px; color: var(--vscode-textLink-foreground); cursor: pointer; white-space: nowrap; }
+  .page-header a:hover { color: var(--vscode-textLink-activeForeground); }
+  .page-subtitle { font-size: 12px; color: var(--vscode-descriptionForeground); margin: 0 0 28px; }
+
+  section { margin-bottom: 34px; }
+  h2 {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; font-weight: 600; margin: 0 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.3));
+  }
+  /* 用 !important 保证覆盖元素自身的 display，切换后端时可靠地整节隐藏 */
+  .hidden { display: none !important; }
+
+  .field { margin-bottom: 18px; }
+  .field:last-child { margin-bottom: 0; }
+  label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+  .hint { font-size: 12px; color: var(--vscode-descriptionForeground); margin: 6px 0 0; line-height: 1.5; }
+  .local-only-badge {
+    display: inline-block;
+    font-size: 11px; font-weight: 600;
+    padding: 0 6px; border-radius: 3px;
+    background: var(--vscode-badge-background); color: var(--vscode-badge-foreground);
+    margin-right: 6px;
+    vertical-align: 1px;
+  }
+
+  input[type="text"], input[type="password"], input[type="number"], select {
+    width: 100%; box-sizing: border-box;
+    background: var(--vscode-input-background); color: var(--vscode-input-foreground);
+    border: 1px solid var(--vscode-input-border, rgba(128,128,128,0.4));
+    border-radius: 3px; padding: 7px 10px; font-size: 13px; font-family: inherit;
+  }
+  input:focus, select:focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+  input[type="number"] { width: 110px; }
+  select { max-width: 320px; }
+
+  .row { display: flex; align-items: center; gap: 8px; }
+  .row input { flex: 1; }
+  .checkbox-field { display: flex; align-items: center; gap: 8px; }
+  .checkbox-field label { margin: 0; font-weight: normal; }
+  .inline-number { display: flex; align-items: center; gap: 8px; margin-top: 8px; margin-left: 24px; }
+  .inline-number label { margin: 0; font-size: 12px; font-weight: normal; color: var(--vscode-descriptionForeground); }
+
+  button {
+    background: var(--vscode-button-secondaryBackground, rgba(128,128,128,0.2));
+    color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+    border: none; border-radius: 3px; padding: 6px 14px;
+    font-size: 13px; font-family: inherit; cursor: pointer; white-space: nowrap;
+  }
+  button:hover:not(:disabled) { background: var(--vscode-button-secondaryHoverBackground, rgba(128,128,128,0.3)); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+  button.primary:hover:not(:disabled) { background: var(--vscode-button-hoverBackground); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+
+  .credential-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--vscode-descriptionForeground); margin: 8px 0 0; }
+  .credential-status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--vscode-descriptionForeground); }
+  .credential-status.set .dot { background: var(--vscode-charts-green, #3fb950); }
+
+  .result { font-size: 12px; margin: 10px 0 0; line-height: 1.5; }
+  .result:empty { display: none; }
+  .result.ok { color: var(--vscode-charts-green, #3fb950); }
+  .result.err { color: var(--vscode-errorForeground, #f14c4c); }

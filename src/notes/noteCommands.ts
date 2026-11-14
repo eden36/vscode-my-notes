@@ -1,4 +1,5 @@
 import * as path from 'path';
+import { writeFile } from 'fs/promises';
 import * as vscode from 'vscode';
 import { getNotesConfig, updateConfig } from '../config';
 import { log } from '../log';
@@ -95,7 +96,7 @@ export function registerNoteCommands(
 
     const target = vscode.Uri.joinPath(parentDir, name);
     try {
-      await vscode.workspace.fs.writeFile(target, new Uint8Array());
+      await writeFile(target.fsPath, new Uint8Array(), { flag: 'wx' });
       provider.refresh();
       const doc = await vscode.workspace.openTextDocument(target);
       await vscode.window.showTextDocument(doc);
@@ -294,7 +295,7 @@ export function registerNoteCommands(
     }),
 
     vscode.commands.registerCommand('mynotes.openSettings', () => {
-      SettingsPanel.show(context);
+      return SettingsPanel.show(context);
     }),
   );
 }
