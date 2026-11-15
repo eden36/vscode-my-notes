@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { CONFIG_SECTION } from './config';
 import { initLog, log } from './log';
 import { registerNoteCommands } from './notes/noteCommands';
+import { NotesDragDropController } from './notes/notesDragDrop';
+import type { NoteItem } from './notes/noteItem';
 import { NotesTreeProvider } from './notes/notesTreeProvider';
 import { SettingsPanel } from './settings/settingsPanel';
 import { registerSyncCommands } from './sync/syncCommands';
@@ -16,15 +18,21 @@ export function activate(context: vscode.ExtensionContext): void {
   const treeProvider = new NotesTreeProvider();
   context.subscriptions.push(treeProvider);
 
-  const treeView = vscode.window.createTreeView('syncnotes.notesView', {
-    treeDataProvider: treeProvider,
-    showCollapseAll: true,
-  });
-  context.subscriptions.push(treeView);
-
   const syncManager = new SyncManager(context);
   activeManager = syncManager;
   context.subscriptions.push(syncManager);
+
+  const treeRef: { current?: vscode.TreeView<NoteItem> } = {};
+  const dragDrop = new NotesDragDropController(treeProvider, () => treeRef.current!, syncManager);
+  const treeView = vscode.window.createTreeView('syncnotes.notesView', {
+    treeDataProvider: treeProvider,
+    showCollapseAll: true,
+    canSelectMany: true,
+    dragAndDropController: dragDrop,
+  });
+  treeRef.current = treeView;
+  context.subscriptions.push(treeView);
+
   const presentation = new SyncPresentation(syncManager);
   context.subscriptions.push(presentation, syncManager.onDidChangeState(event => {
     if (event.result) { treeProvider.refresh(); }

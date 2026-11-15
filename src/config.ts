@@ -42,6 +42,8 @@ export interface NotesConfig {
   noteExtensions: string[];
   /** 配置中含 `*`，表示所有文件都视为笔记 */
   allExtensions: boolean;
+  /** 树内拖放移动前是否确认（对齐 explorer.confirmDragAndDrop） */
+  confirmDragAndDrop: boolean;
 }
 
 export interface SyncConfig {
@@ -95,6 +97,7 @@ export function getNotesConfig(issues?: ConfigurationIssue[]): NotesConfig {
     defaultNoteExtension: read<string>('defaultNoteExtension', 'md').trim().replace(/^\./, '') || 'md',
     noteExtensions: normalized.filter((ext) => ext !== '*'),
     allExtensions: normalized.includes('*'),
+    confirmDragAndDrop: read<boolean>('confirmDragAndDrop', true),
   };
 }
 

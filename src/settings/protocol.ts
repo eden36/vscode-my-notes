@@ -54,7 +54,7 @@ function record(value: unknown): value is Record<string, unknown> {
 const TEXT_KEYS = new Set(['notesLocation', 'defaultNoteExtension', 'sync.deviceName', 'sync.git.remoteUrl',
   'sync.git.branch', 'sync.git.commitMessageTemplate', 'sync.git.userName', 'sync.git.userEmail',
   'sync.webdav.url', 'sync.webdav.remotePath', 'sync.webdav.username']);
-const BOOLEAN_KEYS = new Set(['sync.onStartup', 'sync.onWindowFocus', 'sync.onSave']);
+const BOOLEAN_KEYS = new Set(['sync.onStartup', 'sync.onWindowFocus', 'sync.onSave', 'confirmDragAndDrop']);
 const NUMBER_KEYS = new Set(['sync.focusCooldownSeconds', 'sync.onSaveDebounceSeconds']);
 function validExtension(value: string): boolean {
   const normalized = value.trim().replace(/^\./, '');

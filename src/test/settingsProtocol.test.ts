@@ -5,6 +5,8 @@ describe('设置协议校验', () => {
   it('拒绝未登记配置项与错误类型', () => {
     assert.throws(() => validateConfigUpdate('unknown', true));
     assert.throws(() => validateConfigUpdate('sync.onSave', 'true'));
+    validateConfigUpdate('confirmDragAndDrop', false);
+    assert.throws(() => validateConfigUpdate('confirmDragAndDrop', 'true'));
     assert.throws(() => parseInbound({ type: 'saveCredential', provider: 'unknown', value: 'fixture' }));
   });
   it('数值范围遵循现有设置声明并支持小数', () => {

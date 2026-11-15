@@ -30,6 +30,8 @@ export class SyncManager implements vscode.Disposable {
   private readonly editors: EditorState;
   private pending: SyncTrigger | undefined;
   private running: Promise<void> | undefined;
+  /** 本地独占写盘链：拖放等写盘期间 requestSync 会等到写完再启动。 */
+  private mutationQueue: Promise<void> = Promise.resolve();
   private controller: AbortController | undefined;
   private cancellation: vscode.CancellationTokenSource | undefined;
   private root: string | undefined;
@@ -154,6 +156,14 @@ export class SyncManager implements vscode.Disposable {
     if (this.disposed) {
       return Promise.resolve();
     }
+    // 先等到本地独占写盘结束，避免与拖放等写盘并发
+    return this.mutationQueue.then(() => this.startSync(trigger));
+  }
+
+  private startSync(trigger: SyncTrigger): Promise<void> {
+    if (this.disposed) {
+      return Promise.resolve();
+    }
     if (this.running) {
       if (trigger === 'manual' || !this.pending) {
         this.pending = trigger;
@@ -165,6 +175,7 @@ export class SyncManager implements vscode.Disposable {
     });
     return this.running;
   }
+
   private async drain(trigger: SyncTrigger): Promise<void> {
     let current: SyncTrigger | undefined = trigger;
     while (current && !this.disposed) {
@@ -186,6 +197,42 @@ export class SyncManager implements vscode.Disposable {
   cancel(): void {
     this.controller?.abort();
     this.cancellation?.cancel();
+  }
+
+  /** 取消当前同步并等到空闲。 */
+  async waitUntilIdle(): Promise<void> {
+    this.cancel();
+    if (this.running) {
+      await this.running;
+    }
+  }
+
+  /**
+   * 独占执行本地写盘：取消并等待同步空闲后执行；期间新的 requestSync 会排队到写盘结束。
+   * 调用方应在返回后再 requestSync，避免在回调内同步等待自身互斥导致死锁。
+   */
+  async runExclusiveLocalWrite<T>(rootUri: vscode.Uri, fn: (assertActive: () => void) => Promise<T>): Promise<T> {
+    const previous = this.mutationQueue;
+    let release!: () => void;
+    this.mutationQueue = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let lease: SyncLock | undefined;
+    try {
+      await previous;
+      await this.waitUntilIdle();
+      if (this.disposed) { throw new vscode.CancellationError(); }
+      const root = await canonicalNotesPath(rootUri.fsPath);
+      lease = await SyncLock.acquire(this.state, notesKey(root), getSyncConfig().deviceName);
+      if (!lease) { throw new Error('笔记目录正在由其他窗口同步或写入，请稍后重试。'); }
+      const activeLease = lease;
+      return await fn(() => {
+        if (this.disposed) { throw new vscode.CancellationError(); }
+        activeLease.assertActive();
+      });
+    } finally {
+      try { await lease?.release(); } finally { release(); }
+    }
   }
   /** 欢迎页或外部工具创建目录后，在下次保存或同步时恢复编辑登记。 */
   private async resolveRoot(version: number): Promise<string | undefined> {
@@ -336,6 +383,7 @@ export class SyncManager implements vscode.Disposable {
     this.cancel();
     this.disposables.forEach(disposable => disposable.dispose());
     await this.running;
+    await this.mutationQueue;
     await this.ready.catch(() => undefined);
     await this.editors.dispose();
     this.events.dispose();
