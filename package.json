@@ -2,7 +2,8 @@
   "name": "syncnotes",
   "displayName": "SyncNotes",
   "description": "Markdown 笔记管理，支持 Git 仓库与 WebDAV 同步",
-  "version": "0.1.2",
+  "icon": "resources/icon.png",
+  "version": "1.0.1",
   "publisher": "saltcoreyan",
   "license": "MIT",
   "engines": {
