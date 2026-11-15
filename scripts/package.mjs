@@ -1,10 +1,31 @@
 // Windows 文件系统不保存 Unix 执行位，打包后修正 VSIX 中搜索程序的权限。
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
 import path from 'node:path';
 
-const vsce = path.resolve('node_modules', '@vscode', 'vsce', 'vsce');
-const result = spawnSync(process.execPath, [vsce, 'package', ...process.argv.slice(2)], { encoding: 'utf8', windowsHide: true });
+const platforms = ['win32-x64', 'win32-arm64', 'darwin-x64', 'darwin-arm64', 'linux-x64', 'linux-arm64'];
+const args = process.argv.slice(2);
+const targetIndices = args.flatMap((arg, index) => arg === '--target' || arg === '-t' || arg.startsWith('--target=') ? [index] : []);
+if (targetIndices.length > 1) { throw new Error('打包目标只能指定一次。'); }
+const targetIndex = targetIndices[0] ?? -1;
+const target = targetIndex < 0 ? `${process.platform}-${process.arch}` : args[targetIndex].startsWith('--target=') ? args[targetIndex].slice(9) : args[targetIndex + 1];
+if (!platforms.includes(target)) { throw new Error(`不支持打包目标：${target ?? '未指定'}。`); }
+if (args.some(arg => arg === '--ignoreFile' || arg.startsWith('--ignoreFile='))) { throw new Error('打包脚本不支持自定义忽略文件。'); }
+if (targetIndex < 0) { args.push('--target', target); }
+// 临时忽略文件仅排除其他平台，不修改开发构建产物。
+const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'syncnotes-package-'));
+let result;
+try {
+  const ignore = await fs.readFile('.vscodeignore', 'utf8');
+  const exclusions = platforms.filter(platform => platform !== target).map(platform => `dist/ripgrep/${platform}/**`);
+  const ignoreFile = path.join(temporary, 'vscodeignore');
+  await fs.writeFile(ignoreFile, `${ignore}\n${exclusions.join('\n')}\n`);
+  const vsce = path.resolve('node_modules', '@vscode', 'vsce', 'vsce');
+  result = spawnSync(process.execPath, [vsce, 'package', ...args, '--ignoreFile', ignoreFile], { encoding: 'utf8', windowsHide: true });
+} finally {
+  await fs.rm(temporary, { recursive: true, force: true });
+}
 process.stdout.write(result.stdout ?? '');
 process.stderr.write(result.stderr ?? '');
 if (result.error) { throw result.error; }
@@ -25,13 +46,13 @@ for (let i = 0; i < count; i++) {
   const extraLength = bytes.readUInt16LE(offset + 30);
   const commentLength = bytes.readUInt16LE(offset + 32);
   const name = bytes.toString('utf8', offset + 46, offset + 46 + nameLength);
-  if (/^extension\/dist\/ripgrep\/(?:darwin|linux)-(?:x64|arm64)\/rg$/.test(name)) {
+  if (name === `extension/dist/ripgrep/${target}/rg`) {
     bytes[offset + 5] = 3;
     bytes.writeUInt32LE(((0o100755 << 16) | (bytes.readUInt32LE(offset + 38) & 0xffff)) >>> 0, offset + 38);
     updated++;
   }
   offset += 46 + nameLength + extraLength + commentLength;
 }
-if (updated !== 4) { throw new Error('VSIX 缺少需要设置权限的搜索程序。'); }
+if (updated !== (target.startsWith('win32-') ? 0 : 1)) { throw new Error('VSIX 缺少需要设置权限的搜索程序。'); }
 await fs.writeFile(archive, bytes);
-console.log('已设置 VSIX 内 Unix 搜索程序的执行权限');
+if (updated) { console.log('已设置 VSIX 内 Unix 搜索程序的执行权限'); }

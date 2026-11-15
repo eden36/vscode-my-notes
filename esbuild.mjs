@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
 
-// 通用安装包包含各平台程序；npm 锁文件校验来源，构建时复核复制内容。
+// 开发构建准备各平台程序；打包时仅保留目标平台，构建时复核复制内容。
 const rgSource = path.join('node_modules', '@vscode', 'ripgrep-universal');
 const rgTarget = path.join('dist', 'ripgrep');
 for (const platform of ['win32-x64', 'win32-arm64', 'darwin-x64', 'darwin-arm64', 'linux-x64', 'linux-arm64']) {

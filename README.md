@@ -18,6 +18,8 @@
 
 ## 快速开始
 
+手动安装 VSIX 时，请选择与扩展运行环境的操作系统和架构匹配的安装包；远程开发时以远程扩展宿主的平台为准。
+
 1. 打开活动栏中的 **SyncNotes** 图标（笔记页与同步箭头），点击「选择笔记目录」，指定一个用于存放笔记的目录。
 2. 点击视图标题栏的 `+` 新建笔记。
 3. 需要同步时，点击视图标题栏的齿轮图标打开设置页，选择同步方式并填好参数。
@@ -201,10 +203,13 @@ npm run verify:sync-state    # 真实多进程互斥、编辑登记与基线校�
 npm run verify:webdav        # 本地服务上的条件请求、并发与故障恢复
 npm run verify:coordinator   # 任务配置、取消、部分完成与关闭
 npm run verify:host          # 两个隔离 VS Code 宿主的跨窗口验收
-npm run package              # 产出 .vsix
-npm run verify:package       # 检查最新隔离打包产物的资源清单
-npm run verify:installed     # 将隔离打包产物安装到临时目录并验收
+npm run package              # 为当前平台产出 .vsix
+npm run package -- --target linux-x64  # 为指定平台产出 .vsix
+npm run verify:package       # 检查当前平台打包产物的资源清单
+npm run verify:installed     # 将当前平台打包产物安装到临时目录并验收
 ```
+
+打包支持 `win32-x64`、`win32-arm64`、`darwin-x64`、`darwin-arm64`、`linux-x64` 和 `linux-arm64`。每个 VSIX 只包含对应平台的搜索程序；验证其他平台产物时，可在 `npm run verify:package --` 后传入 VSIX 路径。
 
 在 VS Code 中按 <kbd>F5</kbd> 启动扩展开发宿主进行调试。首次按下会自动：
 
