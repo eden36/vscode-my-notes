@@ -1,7 +1,29 @@
 import * as esbuild from 'esbuild';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import { createHash } from 'node:crypto';
 
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
+
+// 通用安装包包含各平台程序；npm 锁文件校验来源，构建时复核复制内容。
+const rgSource = path.join('node_modules', '@vscode', 'ripgrep-universal');
+const rgTarget = path.join('dist', 'ripgrep');
+for (const platform of ['win32-x64', 'win32-arm64', 'darwin-x64', 'darwin-arm64', 'linux-x64', 'linux-arm64']) {
+  const binary = platform.startsWith('win32-') ? 'rg.exe' : 'rg';
+  const source = path.join(rgSource, 'bin', platform, binary);
+  const target = path.join(rgTarget, platform, binary);
+  const data = await fs.readFile(source);
+  const hash = value => createHash('sha256').update(value).digest('hex');
+  let current;
+  try { current = await fs.readFile(target); } catch (error) { if (error.code !== 'ENOENT') { throw error; } }
+  if (!current || hash(current) !== hash(data)) {
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.copyFile(source, target);
+  }
+  if (!platform.startsWith('win32-')) { await fs.chmod(target, 0o755); }
+}
+await fs.copyFile(path.join(rgSource, 'LICENSE'), path.join(rgTarget, 'LICENSE-vscode-ripgrep'));
 
 /**
  * 打印构建错误的插件。watch 模式下 esbuild 默认静默失败，这里显式输出，

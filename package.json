@@ -120,7 +120,7 @@
       },
       {
         "command": "syncnotes.listNotes",
-        "title": "检索笔记",
+        "title": "搜索笔记",
         "category": "SyncNotes",
         "icon": "$(search)"
       },
@@ -187,7 +187,7 @@
         {
           "command": "syncnotes.listNotes",
           "when": "view == syncnotes.notesView",
-          "group": "1_notes@1"
+          "group": "navigation@0"
         },
         {
           "command": "syncnotes.setCredential",
@@ -418,10 +418,11 @@
     "test": "npm run compile-tests && mocha \"out/test/**/*.test.js\"",
     "verify:git": "node scripts/verify-git-sync.mjs",
     "verify:activation": "npm run compile && node scripts/verify-activation.mjs",
+    "verify:search": "npm run compile && node scripts/verify-note-search.mjs",
     "verify:sync-state": "node scripts/verify-sync-state.mjs",
     "debug:prep": "node scripts/setup-debug-workspace.mjs",
     "debug:reset": "node scripts/setup-debug-workspace.mjs --reset",
-    "package": "vsce package",
+    "package": "node scripts/package.mjs",
     "verify:regressions": "node scripts/verify-regressions.mjs",
     "verify:webdav": "node scripts/verify-webdav.mjs",
     "verify:host": "npm run compile-tests && npm run compile && node scripts/verify-host.mjs",
@@ -437,6 +438,7 @@
     "@types/vscode": "^1.90.0",
     "@typescript-eslint/eslint-plugin": "^8.18.0",
     "@typescript-eslint/parser": "^8.18.0",
+    "@vscode/ripgrep-universal": "1.18.0",
     "@vscode/vsce": "^3.9.2",
     "esbuild": "^0.28.1",
     "eslint": "^9.17.0",

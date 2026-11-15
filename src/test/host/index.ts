@@ -67,6 +67,30 @@ export async function run(): Promise<void> {
       assert.ok(await vscode.workspace.applyEdit(edit));
       assert.ok(document.isDirty);
       assert.ok(await editors.isEditing('a.md'));
+      // 只调用待验收扩展注册的命令，避免绕过 VSIX 中的搜索实现。
+      await vscode.commands.executeCommand('syncnotes.listNotes', '未保存');
+      const searchDeadline = Date.now() + 15000;
+      while (document.getText(vscode.window.activeTextEditor?.selection).toString() !== '未保存' && Date.now() < searchDeadline) {
+        await new Promise(resolve => setTimeout(resolve, 250));
+        await vscode.commands.executeCommand('workbench.action.acceptSelectedQuickOpenItem');
+      }
+      assert.strictEqual(document.getText(vscode.window.activeTextEditor?.selection), '未保存', `搜索后文档：${document.getText()}`);
+      const diskFile = path.join(notes, 'disk.md');
+      const diskPath = vscode.Uri.file(diskFile).fsPath;
+      await fs.writeFile(diskFile, '\ufeff😀磁盘验证 installed-search-proof\r\ninstalled-search-proof');
+      await vscode.commands.executeCommand('syncnotes.listNotes', 'installed-search-proof');
+      const diskDeadline = Date.now() + 15000;
+      while (Date.now() < diskDeadline) {
+        const active = vscode.window.activeTextEditor;
+        if (active?.document.uri.fsPath === diskPath && active.document.getText(active.selection) === 'installed-search-proof') { break; }
+        await new Promise(resolve => setTimeout(resolve, 250));
+        await vscode.commands.executeCommand('workbench.action.acceptSelectedQuickOpenItem');
+      }
+      const diskEditor = vscode.window.activeTextEditor;
+      assert.ok(diskEditor, '安装包搜索命令未打开编辑器。');
+      assert.strictEqual(diskEditor.document.uri.fsPath, diskPath, '安装包搜索命令未打开磁盘命中的笔记。');
+      assert.strictEqual(diskEditor.document.getText(diskEditor.selection), 'installed-search-proof');
+      assert.strictEqual(diskEditor.selection.start.character, 7, 'BOM、emoji 与中文前缀后的 UTF-16 定位错误。');
       await fs.writeFile(path.join(root, 'editor-ready'), 'ready');
       await waitFor(path.join(root, 'save-editor'));
       assert.ok(await document.save());

@@ -4,8 +4,9 @@ import * as vscode from 'vscode';
 import { getNotesConfig, updateConfig } from '../config';
 import { log } from '../log';
 import { SettingsPanel } from '../settings/settingsPanel';
-import { exists, listNotesRecursive, validateEntryName } from './noteFs';
+import { exists, validateEntryName } from './noteFs';
 import { NoteItem } from './noteItem';
+import { NoteSearchPicker } from './noteSearchPicker';
 import type { NotesTreeProvider } from './notesTreeProvider';
 
 /** 大小写不敏感的文件系统上，重命名只改大小写不应被判为「已存在」 */
@@ -68,7 +69,9 @@ export function registerNoteCommands(
   context: vscode.ExtensionContext,
   provider: NotesTreeProvider,
   treeView: vscode.TreeView<NoteItem>,
-): void {
+): NoteSearchPicker {
+  const searchPicker = new NoteSearchPicker(context.extensionPath);
+  context.subscriptions.push(searchPicker);
   /** 取得笔记根目录，未配置时引导用户先设置 */
   async function requireRoot(): Promise<vscode.Uri | undefined> {
     const root = provider.rootUri;
@@ -257,37 +260,14 @@ export function registerNoteCommands(
 
     vscode.commands.registerCommand('syncnotes.refresh', () => provider.refresh()),
 
-    vscode.commands.registerCommand('syncnotes.listNotes', async () => {
+    vscode.commands.registerCommand('syncnotes.listNotes', async (initialQuery?: unknown) => {
       const root = await requireRoot();
       if (!root) {
         return;
       }
 
-      let notes: { uri: vscode.Uri; relativePath: string }[];
-      try {
-        notes = await listNotesRecursive(root, getNotesConfig());
-      } catch (err) {
-        log.error('检索笔记失败', err);
-        void vscode.window.showErrorMessage('检索笔记失败，请确认笔记目录是否可访问。');
-        return;
-      }
-
-      if (!notes.length) {
-        void vscode.window.showInformationMessage('笔记目录中还没有笔记。');
-        return;
-      }
-
-      const picked = await vscode.window.showQuickPick(
-        notes.map((note) => ({
-          label: path.basename(note.relativePath),
-          description: path.dirname(note.relativePath) === '.' ? undefined : path.dirname(note.relativePath),
-          uri: note.uri,
-        })),
-        { title: '检索笔记', placeHolder: '输入名称筛选', matchOnDescription: true },
-      );
-      if (picked) {
-        await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(picked.uri));
-      }
+      // 允许调用方预置关键词，标题栏和命令面板仍复用同一个入口。
+      searchPicker.show(typeof initialQuery === 'string' ? initialQuery : undefined);
     }),
 
     vscode.commands.registerCommand('syncnotes.revealInExplorer', async (item: NoteItem) => {
@@ -298,4 +278,5 @@ export function registerNoteCommands(
       return SettingsPanel.show(context);
     }),
   );
+  return searchPicker;
 }

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { CONFIG_SECTION } from './config';
 import { initLog, log } from './log';
 import { registerNoteCommands } from './notes/noteCommands';
+import type { NoteSearchPicker } from './notes/noteSearchPicker';
 import { NotesDragDropController } from './notes/notesDragDrop';
 import type { NoteItem } from './notes/noteItem';
 import { NotesTreeProvider } from './notes/notesTreeProvider';
@@ -11,6 +12,7 @@ import { SyncManager } from './sync/syncManager';
 import { SyncPresentation } from './sync/syncPresentation';
 
 let activeManager: SyncManager | undefined;
+let activeSearch: NoteSearchPicker | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   initLog(context);
@@ -38,7 +40,7 @@ export function activate(context: vscode.ExtensionContext): void {
     if (event.result) { treeProvider.refresh(); }
   }));
 
-  registerNoteCommands(context, treeProvider, treeView);
+  activeSearch = registerNoteCommands(context, treeProvider, treeView);
   registerSyncCommands(context, syncManager);
 
   context.subscriptions.push(
@@ -61,6 +63,8 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export async function deactivate(): Promise<void> {
+  await activeSearch?.shutdown();
+  activeSearch = undefined;
   await activeManager?.dispose();
   activeManager = undefined;
 }
