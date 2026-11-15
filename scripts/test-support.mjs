@@ -34,6 +34,7 @@ export async function testEnvironment() {
   const inputs = [];
   const choices = [];
   const trees = [];
+  const treeViews = [];
   const statusBars = [];
   const pending = new Set();
   const errors = [];
@@ -73,6 +74,9 @@ export async function testEnvironment() {
   }
   const configuration = new Emitter();
   const secretChanges = new Emitter();
+  const activeEditorChanges = new Emitter();
+  const tabChanges = new Emitter();
+  const tabGroupChanges = new Emitter();
   const documents = {
     open: new Emitter(), change: new Emitter(), save: new Emitter(), close: new Emitter()
   };
@@ -82,6 +86,9 @@ export async function testEnvironment() {
   };
   const vscode = {
     Uri,
+    TabInputText: class { constructor(uri) { this.uri = uri; } },
+    TabInputCustom: class { constructor(uri, viewType) { this.uri = uri; this.viewType = viewType; } },
+    TabInputWebview: class { constructor(viewType) { this.viewType = viewType; } },
     FileType: {
       File: 1, Directory: 2, SymbolicLink: 64
     },
@@ -131,6 +138,12 @@ export async function testEnvironment() {
       executeCommand: async (id, ...args) => commands.get(id)?.(...args),
     },
     window: {
+      onDidChangeActiveTextEditor: activeEditorChanges.event,
+      tabGroups: {
+        activeTabGroup: {},
+        onDidChangeTabs: tabChanges.event,
+        onDidChangeTabGroups: tabGroupChanges.event,
+      },
       createOutputChannel: () => ({
         info() {
         }, warn() {
@@ -148,11 +161,19 @@ export async function testEnvironment() {
       onDidChangeWindowState: new Emitter().event,
       createTreeView: (_id, options) => {
         trees.push(options.treeDataProvider);
-        return {
-          reveal: async () => {
+        const visibility = new Emitter();
+        const view = {
+          visible: false, selection: [], reveals: [], visibility,
+          onDidChangeVisibility: visibility.event,
+          reveal: async (item, revealOptions) => {
+            view.reveals.push({ item, options: revealOptions });
+            view.selection = [item];
           }, dispose() {
+            visibility.dispose();
           }
         };
+        treeViews.push(view);
+        return view;
       },
       showInformationMessage: async (message) => {
         messages.push(message);
@@ -292,7 +313,8 @@ export async function testEnvironment() {
     },
   };
   return {
-    root, vscode, context, settings, secrets, commands, messages, panels, inputs, choices, trees, statusBars, documents, errors,
+    root, vscode, context, settings, secrets, commands, messages, panels, inputs, choices, trees, treeViews, statusBars, documents, errors,
+    activeEditorChanges, tabChanges, tabGroupChanges,
     async flush() {
       while (pending.size) {
         await Promise.all([...pending]);

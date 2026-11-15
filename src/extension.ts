@@ -6,6 +6,7 @@ import type { NoteSearchPicker } from './notes/noteSearchPicker';
 import { NotesDragDropController } from './notes/notesDragDrop';
 import type { NoteItem } from './notes/noteItem';
 import { NotesTreeProvider } from './notes/notesTreeProvider';
+import { registerNoteSelection } from './notes/notesSelection';
 import { SettingsPanel } from './settings/settingsPanel';
 import { registerSyncCommands } from './sync/syncCommands';
 import { SyncManager } from './sync/syncManager';
@@ -34,6 +35,7 @@ export function activate(context: vscode.ExtensionContext): void {
   });
   treeRef.current = treeView;
   context.subscriptions.push(treeView);
+  registerNoteSelection(context, treeProvider, treeView);
 
   const presentation = new SyncPresentation(syncManager);
   context.subscriptions.push(presentation, syncManager.onDidChangeState(event => {

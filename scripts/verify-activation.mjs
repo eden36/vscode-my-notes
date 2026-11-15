@@ -46,6 +46,104 @@ try {
   await assert.rejects(fs.stat(path.join(notes, '改名.md')));
   assert.equal(await fs.readFile(path.join(notes, '已有笔记.md'), 'utf8'), '原有内容');
   console.log('通过 新建、重命名与删除入口');
+  // 从真实激活入口触发编辑器、标签和视图事件，验证自动定位边界。
+  const view = env.treeViews[0];
+  const nested = path.join(notes, '子目录', '嵌套笔记.md');
+  await fs.mkdir(path.dirname(nested));
+  await fs.writeFile(nested, '嵌套内容');
+  await fs.writeFile(path.join(notes, '不显示.png'), '非笔记');
+  await fs.mkdir(path.join(notes, '.隐藏目录'));
+  await fs.writeFile(path.join(notes, '.隐藏目录', '隐藏.md'), '隐藏内容');
+  const textInput = file => new env.vscode.TabInputText(env.vscode.Uri.file(file));
+  const switchTab = async input => {
+    env.vscode.window.tabGroups.activeTabGroup = { activeTab: { input } };
+    env.vscode.window.activeTextEditor = input instanceof env.vscode.TabInputText ? { document: { uri: input.uri } } : undefined;
+    env.tabChanges.fire({});
+    env.activeEditorChanges.fire(env.vscode.window.activeTextEditor);
+    await env.flush();
+  };
+  await switchTab(textInput(nested));
+  assert.equal(view.reveals.length, 0, '隐藏侧栏时不应主动定位。');
+  view.visible = true;
+  view.visibility.fire({ visible: true });
+  await env.flush();
+  assert.equal(view.selection[0].uri.fsPath, nested);
+  assert.equal(view.reveals.at(-1).options.select, true);
+  assert.equal(view.reveals.at(-1).options.focus, false);
+  assert.equal(env.vscode.window.activeTextEditor.document.uri.fsPath, nested);
+  const selected = view.selection[0];
+  for (const input of [
+    textInput(path.join(env.root, 'notes-other', '外部.md')),
+    textInput(path.join(notes, '不显示.png')),
+    textInput(path.join(notes, '.隐藏目录', '隐藏.md')),
+    new env.vscode.TabInputWebview('markdown.preview'),
+    new env.vscode.TabInputCustom(env.vscode.Uri.file(path.join(notes, '已有笔记.md')), 'other.preview'),
+  ]) {
+    await switchTab(input);
+    assert.equal(view.selection[0], selected, '非笔记及无法取得源文件的预览应保留选中项。');
+  }
+  await switchTab(new env.vscode.TabInputCustom(env.vscode.Uri.file(path.join(notes, '已有笔记.md')), 'vscode.markdown.preview.editor'));
+  assert.equal(view.selection[0].name, '已有笔记.md');
+  // 分屏切换活动组时，即使没有文本编辑器事件也应更新。
+  env.vscode.window.tabGroups.activeTabGroup = { activeTab: { input: textInput(nested) } };
+  env.tabGroupChanges.fire({});
+  await env.flush();
+  assert.equal(view.selection[0].uri.fsPath, nested);
+  const manualSelection = [selected, { id: '其他手动选中项' }];
+  view.selection = manualSelection;
+  env.tabChanges.fire({});
+  await env.flush();
+  assert.equal(view.selection, manualSelection, '活动目标不变时，保存或固定标签不应覆盖树中手动多选。');
+  view.selection = [];
+  env.trees[0].refresh();
+  await env.flush();
+  assert.equal(view.selection[0].uri.fsPath, nested);
+  console.log('通过 活动笔记跟随、嵌套目录、过滤规则、侧栏恢复、分屏与自定义 Markdown 预览');
+
+  // 人为暂停第一次目录读取，确认过期请求不会覆盖快速切换后的目标。
+  const provider = env.trees[0];
+  const getChildren = provider.getChildren.bind(provider);
+  let releaseRead;
+  let startRead;
+  const readStarted = new Promise(resolve => { startRead = resolve; });
+  const readGate = new Promise(resolve => { releaseRead = resolve; });
+  let holdRead = true;
+  provider.getChildren = async item => {
+    if (holdRead) { holdRead = false; startRead(); await readGate; }
+    return getChildren(item);
+  };
+  const beforeRapid = view.reveals.length;
+  const firstSwitch = switchTab(textInput(path.join(notes, '已有笔记.md')));
+  await readStarted;
+  const lastSwitch = switchTab(textInput(nested));
+  releaseRead();
+  await Promise.all([firstSwitch, lastSwitch]);
+  assert.equal(view.selection[0].uri.fsPath, nested);
+  assert.equal(view.reveals.length, beforeRapid + 1, '只应定位最后一次切换的笔记。');
+  assert.equal(view.reveals.at(-1).item.uri.fsPath, nested);
+  provider.getChildren = getChildren;
+
+  const reveal = view.reveal;
+  let releaseReveal;
+  let startReveal;
+  const revealStarted = new Promise(resolve => { startReveal = resolve; });
+  const revealGate = new Promise(resolve => { releaseReveal = resolve; });
+  let holdReveal = true;
+  view.reveal = async (...args) => {
+    if (holdReveal) { holdReveal = false; startReveal(); await revealGate; }
+    await reveal(...args);
+  };
+  const revealingSwitch = switchTab(textInput(path.join(notes, '已有笔记.md')));
+  await revealStarted;
+  const latestSwitch = switchTab(textInput(nested));
+  releaseReveal();
+  await Promise.all([revealingSwitch, latestSwitch]);
+  assert.equal(view.selection[0].uri.fsPath, nested, '在途定位完成后应继续定位最新笔记。');
+  view.reveal = reveal;
+  view.visible = false;
+  view.visibility.fire({ visible: false });
+  await env.flush();
+  console.log('通过 快速切换时丢弃过期查找并串行完成在途定位');
   await env.commands.get('syncnotes.openSettings')();
   const panel = env.panels[0];
   await env.commands.get('syncnotes.openSettings')();
